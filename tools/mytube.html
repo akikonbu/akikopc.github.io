@@ -1,0 +1,3098 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="YouTube Data API v3 を使ってブラウザだけで動作する YouTube クライアント MyTube" />
+<title>MyTube - YouTube Data API クライアント</title>
+<style>
+/* ============================================================
+   MyTube - single file YouTube client
+   ============================================================ */
+:root{
+  --bg:#0f0f0f;
+  --surface:#272727;
+  --surface-hover:#3f3f3f;
+  --border:#303030;
+  --text:#f1f1f1;
+  --text2:#aaaaaa;
+  --red:#ff0033;
+  --blue:#3ea6ff;
+  --hdr:56px;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:"Roboto","Noto Sans JP","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,system-ui,-apple-system,sans-serif;
+  font-feature-settings:"palt";
+  -webkit-font-smoothing:antialiased;
+  -webkit-tap-highlight-color:transparent;
+}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit}
+img{display:block}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#4d4d4d;border-radius:999px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+*{scrollbar-width:thin;scrollbar-color:#4d4d4d transparent}
+
+/* ---------- utilities ---------- */
+.row{display:flex;align-items:center}
+.grow{flex:1;min-width:0}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.line2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.line3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.line4{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.muted{color:var(--text2)}
+.small{font-size:12px}
+.hide-mobile{display:initial}
+.only-mobile{display:none}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 16px;border:0;border-radius:18px;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s;user-select:none}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--text);color:var(--bg)}
+.btn-primary:hover{background:#d9d9d9}
+.btn-secondary{background:var(--surface);color:var(--text)}
+.btn-secondary:hover{background:var(--surface-hover)}
+.btn-ghost{background:transparent;color:var(--text)}
+.btn-ghost:hover{background:var(--surface)}
+.btn-lg{height:40px;padding:0 20px}
+.chip{height:32px;padding:0 12px;border:0;border-radius:8px;background:var(--surface);color:var(--text);font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s}
+.chip:hover{background:var(--surface-hover)}
+.chip.active{background:var(--text);color:var(--bg)}
+.icon-btn{width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:50%;background:transparent;color:var(--text);cursor:pointer;flex:none}
+.icon-btn:hover{background:var(--surface-hover)}
+.icon-btn.on{background:var(--surface)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+/* ---------- header ---------- */
+#hdr{
+  position:fixed;top:0;left:0;right:0;height:var(--hdr);z-index:60;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  background:var(--bg);padding:0 8px;
+}
+.hdr-left{display:flex;align-items:center;gap:2px}
+.logo{display:flex;align-items:center;gap:2px;padding:0 8px;font-size:20px;font-weight:700;letter-spacing:-.06em}
+.logo sup{font-size:10px;font-weight:400;letter-spacing:.02em;color:var(--text2);margin-left:2px}
+.hdr-right{display:flex;align-items:center;gap:4px}
+.avatar-btn{width:32px;height:32px;border:0;border-radius:50%;cursor:pointer;color:#fff;font-size:14px;font-weight:600;background:linear-gradient(135deg,#c026d3,#4f46e5);margin-left:4px;flex:none}
+.status-btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:18px;border:1px solid transparent;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
+.status-btn.demo{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.12);color:#fcd34d}
+.status-btn.live{border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.12);color:#86efac}
+.status-btn.ok{border-color:rgba(59,130,246,.4);background:rgba(59,130,246,.14);color:#93c5fd}
+.src-badge{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;font-size:13px;line-height:1.6}
+.src-badge .ic{flex:none;margin-top:2px}
+.src-badge.ok{border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:#bbf7d0}
+.src-badge.demo{border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.12);color:#fde68a}
+.src-badge .sub{display:block;font-size:11px;opacity:.85;word-break:break-all}
+.status-btn:hover{filter:brightness(1.25)}
+.dot{width:8px;height:8px;border-radius:50%;background:#4ade80;flex:none}
+
+/* ---------- search ---------- */
+#search-wrap{position:relative;flex:1;max-width:720px;display:flex;align-items:center;justify-content:center}
+.search-form{display:flex;align-items:center;flex:1}
+.search-field{display:flex;align-items:center;flex:1;height:40px;background:#121212;border:1px solid var(--border);border-right:0;border-radius:20px 0 0 20px;padding:0 4px 0 16px;min-width:0}
+.search-field:focus-within{border-color:var(--blue)}
+.search-field input{flex:1;min-width:0;height:100%;background:transparent;border:0;outline:none;color:var(--text);font-size:16px}
+.search-field input::placeholder{color:var(--text2)}
+.search-clear{width:32px;height:32px;border:0;border-radius:50%;background:transparent;color:var(--text);cursor:pointer;display:none;align-items:center;justify-content:center;flex:none}
+.search-clear:hover{background:var(--surface-hover)}
+.search-form.has-value .search-clear{display:inline-flex}
+.search-submit{width:64px;height:40px;border:1px solid var(--border);border-left:0;border-radius:0 20px 20px 0;background:var(--surface);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.search-submit:hover{background:var(--surface-hover)}
+.mic-btn{width:40px;height:40px;margin-left:12px;border:0;border-radius:50%;background:var(--surface);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none}
+.mic-btn:hover{background:var(--surface-hover)}
+.mic-btn.listening{background:var(--red);color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.suggest{position:absolute;top:48px;left:0;right:52px;background:var(--surface);border-radius:12px;padding:8px 0;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:70;max-height:60vh;overflow:auto;display:none}
+.suggest.open{display:block;animation:fade .18s ease-out}
+.suggest-item{display:flex;align-items:center;gap:16px;padding:8px 16px;cursor:pointer;font-size:15px;font-weight:500}
+.suggest-item:hover,.suggest-item.active{background:var(--surface-hover)}
+.suggest-item .ic{color:var(--text2);flex:none}
+.suggest-item .rm{margin-left:auto;color:var(--blue);font-size:12px;opacity:0}
+.suggest-item:hover .rm{opacity:1}
+#mobile-search{position:fixed;inset:0 0 auto 0;height:var(--hdr);background:var(--bg);display:none;align-items:center;gap:8px;padding:0 8px;z-index:80}
+body.searching #mobile-search{display:flex}
+body.searching #hdr{display:none}
+
+/* ---------- sidebar ---------- */
+#sidebar{
+  position:fixed;top:var(--hdr);left:0;bottom:0;width:240px;z-index:50;
+  overflow-y:auto;overscroll-behavior:contain;background:var(--bg);padding:12px 12px 48px;display:none;
+}
+body.sb-expanded #sidebar{display:block}
+body.sb-mini #sidebar{display:flex;width:72px;flex-direction:column;align-items:center;padding:4px 0 24px;gap:2px}
+body.route-watch #sidebar{display:none}
+#main{padding-top:var(--hdr);min-height:100vh}
+body.sb-expanded #main{padding-left:240px}
+body.sb-mini #main{padding-left:72px}
+body.route-watch #main{padding-left:0}
+.nav-item{display:flex;align-items:center;gap:24px;height:40px;padding:0 12px;border-radius:10px;font-size:14px;cursor:pointer}
+.nav-item:hover{background:var(--surface)}
+.nav-item.active{background:var(--surface);font-weight:500}
+.nav-item .ic{flex:none}
+.nav-sep{height:1px;background:var(--border);margin:12px 0}
+.stack12{display:flex;flex-direction:column;gap:12px}
+.status-card{display:flex;align-items:flex-start;gap:12px;margin-top:8px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:12px;line-height:1.7}
+.status-card .ic{flex:none;margin-top:2px}
+.status-card.demo{border:1px solid rgba(245,158,11,.35);background:rgba(245,158,11,.12);color:#fcd34d}
+.status-card.ok{border:1px solid rgba(34,197,94,.35);background:rgba(34,197,94,.1);color:#86efac}
+.status-card:hover{filter:brightness(1.25)}
+.nav-label{padding:8px 12px 6px;font-size:16px;font-weight:500}
+.nav-note{padding:6px 12px;font-size:12px;line-height:1.7;color:var(--text2)}
+.sb-foot{padding:12px;font-size:12px;line-height:1.8;color:var(--text2)}
+.mini-item{width:64px;height:74px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:10px;cursor:pointer}
+.mini-item:hover{background:var(--surface)}
+.mini-item.active{background:var(--surface);font-weight:500}
+body.sb-expanded .mini-only{display:none}
+body:not(.sb-mini) .mini-only{display:none}
+.sub-avatar{width:24px;height:24px;border-radius:50%;flex:none;object-fit:cover;background:var(--surface)}
+
+/* ---------- drawer (mobile / compact) ---------- */
+#drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:90;opacity:0;pointer-events:none;transition:opacity .2s}
+body.drawer-open #drawer-overlay{opacity:1;pointer-events:auto}
+#drawer{position:fixed;top:0;left:0;bottom:0;width:240px;background:var(--bg);z-index:95;overflow-y:auto;transform:translateX(-100%);transition:transform .2s;padding-bottom:40px}
+body.drawer-open #drawer{transform:translateX(0)}
+.drawer-head{position:sticky;top:0;display:flex;align-items:center;gap:2px;height:var(--hdr);background:var(--bg);padding:0 8px;z-index:2}
+
+/* ---------- chips bar ---------- */
+.chipbar{position:sticky;top:var(--hdr);z-index:40;background:var(--bg);padding:8px 0}
+.chipbar-scroll{display:flex;gap:12px;overflow-x:auto;padding:0 16px;scrollbar-width:none}
+.chipbar-scroll::-webkit-scrollbar{display:none}
+.chipbar .edge{position:absolute;top:0;bottom:0;width:80px;display:flex;align-items:center;pointer-events:none;opacity:0;transition:opacity .2s}
+.chipbar .edge.show{opacity:1;pointer-events:auto}
+.chipbar .edge.l{left:0;justify-content:flex-start;background:linear-gradient(90deg,var(--bg) 55%,transparent)}
+.chipbar .edge.r{right:0;justify-content:flex-end;background:linear-gradient(270deg,var(--bg) 55%,transparent)}
+.chipbar .edge button{pointer-events:auto}
+
+/* ---------- video cards ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:40px 16px}
+.card{display:flex;flex-direction:column;gap:12px}
+.thumb-wrap{position:relative}
+.thumb{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:12px;background:var(--surface);transition:opacity .3s}
+.thumb.sm{border-radius:8px}
+.badge{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.82);color:#fff;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px}
+.badge.live{background:var(--red);left:6px;right:auto}
+.save-pill{position:absolute;right:6px;top:6px;width:28px;height:28px;border:0;border-radius:4px;background:rgba(0,0,0,.8);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+.card:hover .save-pill,.save-pill.on{opacity:1}
+.card-body{display:flex;gap:12px}
+.avatar{border-radius:50%;object-fit:cover;flex:none;background:var(--surface)}
+.avatar-letter{display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:500;flex:none}
+.card-title{font-size:16px;font-weight:500;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card-meta{font-size:13px;color:var(--text2);line-height:1.6}
+.card-ch{font-size:13px;color:var(--text2)}
+.card-ch:hover{color:var(--text)}
+.more-btn{width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--text);cursor:pointer;opacity:0;flex:none;display:flex;align-items:center;justify-content:center}
+.card:hover .more-btn,.more-btn.open{opacity:1}
+.menu{position:absolute;z-index:120;width:240px;background:var(--surface);border-radius:12px;padding:8px 0;box-shadow:0 10px 32px rgba(0,0,0,.6);animation:fade .15s ease-out}
+.menu button{display:flex;align-items:center;gap:16px;width:100%;padding:10px 16px;border:0;background:transparent;color:var(--text);font-size:14px;text-align:left;cursor:pointer}
+.menu button:hover{background:var(--surface-hover)}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* list card (search results) */
+.list-card{display:flex;flex-direction:column;gap:12px}
+.list-thumb{width:100%}
+.list-body{display:flex;gap:8px;min-width:0}
+.list-title{font-size:18px;font-weight:400;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.list-desc{font-size:12px;color:var(--text2);line-height:1.7;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.list-ch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin:10px 0}
+.list-ch:hover{color:var(--text)}
+
+/* compact card (related) */
+.compact{display:flex;gap:8px}
+.compact .thumb-wrap{width:168px;flex:none}
+.compact .t{font-size:14px;font-weight:500;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
+/* skeleton */
+.sk{background:linear-gradient(90deg,#232323 25%,#333 50%,#232323 75%);background-size:200% 100%;animation:sh 1.3s linear infinite;border-radius:8px}
+@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.spinner{display:flex;justify-content:center;padding:32px 0}
+.spinner i{width:32px;height:32px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--text);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- states ---------- */
+.state{max-width:560px;margin:0 auto;padding:64px 16px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.state.compact{padding:24px 16px}
+.state .ic{color:var(--text2)}
+.state h3{margin:0;font-size:18px;font-weight:500}
+.state p{margin:0;font-size:14px;color:var(--text2);line-height:1.8}
+.state .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+
+/* ---------- watch page ---------- */
+.watch{max-width:1754px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+.player{width:100%;aspect-ratio:16/9;background:#000;position:relative}
+.player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.watch-main{min-width:0;flex:1;padding:0}
+#watch-info{padding:0 16px}
+.watch-aside{width:100%;padding:16px 16px 40px}
+.watch h1{font-size:20px;font-weight:600;line-height:1.4;margin:12px 0 0}
+.watch-row{display:flex;flex-direction:column;gap:12px;margin:12px 0}
+.ch-row{display:flex;align-items:center;gap:12px}
+.ch-name{font-size:16px;font-weight:500}
+.actions{display:flex;align-items:center;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.actions::-webkit-scrollbar{display:none}
+.pill-group{display:flex;align-items:center;height:36px;border-radius:18px;background:var(--surface);flex:none}
+.pill-group button{display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;border:0;background:transparent;color:var(--text);font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap}
+.pill-group button:hover{background:var(--surface-hover)}
+.pill-group .sep{width:1px;height:24px;background:var(--border)}
+.pill-group button.on svg{fill:currentColor}
+.desc{margin-top:12px;background:var(--surface);border-radius:12px;padding:12px;font-size:14px;line-height:1.8;cursor:pointer}
+.desc:hover{background:#2e2e2e}
+.desc.open{cursor:default}
+.desc .body{white-space:pre-wrap;word-break:break-word;margin-top:8px}
+.desc .more{font-weight:500;margin-top:8px;display:inline-block}
+.desc a,.cmt a{color:var(--blue);word-break:break-all}
+.tag{color:var(--blue)}
+.cmt-count{font-size:20px;font-weight:600;margin:32px 0 24px}
+.cmt{display:flex;gap:16px}
+.cmt .nick{font-size:13px;font-weight:500}
+.cmt .text{font-size:14px;line-height:1.8;white-space:pre-wrap;word-break:break-word;margin:4px 0 0}
+.cmt .btns{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);margin-top:4px}
+.cmt .btns button{border:0;background:transparent;color:var(--text2);cursor:pointer;padding:8px;border-radius:50%;display:flex;align-items:center;gap:6px;font-size:12px}
+.cmt .btns button:hover{background:var(--surface)}
+.cmt .reply{margin-top:6px;color:var(--blue);border:0;background:transparent;font-size:13px;font-weight:500;padding:8px 12px;border-radius:18px;cursor:pointer}
+.cmt .reply:hover{background:rgba(62,166,255,.1)}
+.cmt-list{display:flex;flex-direction:column;gap:24px}
+.notice{margin-top:12px;border-radius:12px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);padding:16px;font-size:14px;line-height:1.8}
+.notice strong{display:block;margin-bottom:4px}
+
+/* ---------- channel page ---------- */
+.banner{width:100%;aspect-ratio:6.2/1;border-radius:16px;object-fit:cover}
+.ch-head{display:flex;flex-direction:column;gap:16px;margin-top:16px}
+.ch-desc{max-width:720px;text-align:left;font-size:14px;color:var(--text2);line-height:1.8;background:transparent;border:0;padding:0;cursor:pointer}
+.ch-tabs{display:flex;gap:24px;border-bottom:1px solid var(--border);margin-top:24px}
+.ch-tabs div{padding:12px 2px;border-bottom:2px solid var(--text);font-size:14px;font-weight:500}
+.ch-stats{display:flex;flex-wrap:wrap;gap:8px;font-size:14px;color:var(--text2);margin-top:4px}
+.ch-handle{color:var(--text);font-weight:500}
+
+/* ---------- page shells ---------- */
+.page{max-width:1284px;margin:0 auto;padding:24px 16px 40px}
+.page-head{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.page-head .badge-ic{width:44px;height:44px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;flex:none}
+.page-head h1{margin:0;font-size:24px;font-weight:600}
+.sub-tabs{display:flex;gap:24px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.sub-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--text2);font-size:14px;font-weight:500;padding:10px 2px;cursor:pointer}
+.sub-tabs button.active{border-bottom-color:var(--text);color:var(--text)}
+.rank{width:32px;flex:none;text-align:right;font-size:18px;color:var(--text2);padding-top:2px}
+.search-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:20px}
+.demo-banner{position:relative;display:flex;flex-direction:column;gap:12px;border:1px solid rgba(245,158,11,.35);border-radius:16px;padding:16px;margin-bottom:24px;background:linear-gradient(90deg,rgba(245,158,11,.16),rgba(249,115,22,.06),transparent)}
+.demo-banner .ic{width:44px;height:44px;border-radius:50%;background:rgba(245,158,11,.2);color:#fcd34d;display:flex;align-items:center;justify-content:center;flex:none}
+.demo-banner h2{margin:0;font-size:16px;font-weight:500}
+.demo-banner p{margin:2px 0 0;font-size:14px;color:var(--text2);line-height:1.8}
+.live-banner{position:relative;display:flex;flex-direction:column;gap:12px;border:1px solid rgba(59,130,246,.35);border-radius:16px;padding:16px;margin-bottom:24px;background:linear-gradient(90deg,rgba(59,130,246,.16),rgba(139,92,246,.07),transparent)}
+.live-banner .ic{width:44px;height:44px;border-radius:50%;background:rgba(59,130,246,.2);color:#93c5fd;display:flex;align-items:center;justify-content:center;flex:none}
+.live-banner h2{margin:0;font-size:16px;font-weight:500}
+.live-banner p{margin:2px 0 0;font-size:14px;color:var(--text2);line-height:1.8}
+.live-banner .close{position:absolute;top:8px;right:8px}
+.text-strong{font-weight:600;color:var(--text)}
+.demo-banner .close{position:absolute;top:8px;right:8px}
+
+/* ---------- modal ---------- */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;justify-content:center;animation:fade .15s}
+.modal{width:100%;max-width:672px;max-height:92vh;overflow-y:auto;background:#212121;border-radius:16px 16px 0 0;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal-head{position:sticky;top:0;background:#212121;display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);z-index:2}
+.modal-head h2{margin:0;font-size:18px;font-weight:500}
+.modal-body{padding:24px;display:flex;flex-direction:column;gap:32px}
+.modal-body h3{margin:0 0 8px;font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px}
+.modal-body p{margin:0 0 16px;font-size:14px;color:var(--text2);line-height:1.9}
+.modal-body ol{margin:0;padding-left:20px;font-size:14px;color:var(--text2);line-height:1.9}
+.modal-body a{color:var(--blue);text-decoration:underline}
+.field{position:relative;display:flex;gap:8px}
+.input{flex:1;min-width:0;height:44px;background:#121212;border:1px solid var(--border);border-radius:10px;padding:0 44px 0 14px;color:var(--text);font-size:14px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;outline:none}
+.input:focus{border-color:var(--blue)}
+.input.plain{font-family:inherit;padding-right:14px}
+.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--text2);cursor:pointer;padding:8px;border-radius:50%}
+.eye:hover{background:var(--surface-hover)}
+.result{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:14px;display:flex;gap:8px;line-height:1.7}
+.result.ok{background:rgba(34,197,94,.12);color:#bbf7d0}
+.result.bad{background:rgba(239,68,68,.12);color:#fecaca}
+.box{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;padding:16px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---------- toasts ---------- */
+#toasts{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:300;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{display:flex;align-items:center;gap:16px;background:var(--text);color:var(--bg);border-radius:8px;padding:12px 16px;font-size:14px;pointer-events:auto;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:toastIn .2s ease-out}
+.toast button{border:0;background:transparent;color:#1d4ed8;font-weight:600;cursor:pointer;font-size:14px}
+.toast .x{color:#3f3f41;opacity:.8;display:flex}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ---------- responsive ---------- */
+@media (max-width:767px){
+  .hide-mobile{display:none}
+  .only-mobile{display:inline-flex}
+  #search-wrap{display:none}
+  body.sb-mini #sidebar{display:none}
+  body.sb-mini #main{padding-left:0}
+  body.sb-expanded #main{padding-left:0}
+  .more-btn{opacity:1}
+  .save-pill{opacity:1}
+  #status-btn{display:none}
+  .hdr-right{gap:0}
+}
+@media (min-width:640px){
+  .list-card{flex-direction:row;gap:16px}
+  .list-thumb{width:300px;flex:none}
+  .ch-head{flex-direction:row;align-items:center;gap:24px}
+  .demo-banner{flex-direction:row;align-items:center;gap:20px;padding:20px}
+}
+@media (min-width:1024px){
+  .watch{flex-direction:row;padding:24px 24px 0}
+  .watch-main{padding:0}
+  .watch-aside{width:402px;flex:none;padding:0 0 40px}
+  #watch-info{padding:0}
+  .watch-row{flex-direction:row;align-items:center;justify-content:space-between}
+  .list-thumb{width:360px}
+  .modal-bg{align-items:center;padding:24px}
+  .modal{border-radius:16px}
+}
+@media (min-width:768px){
+  .grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+}
+</style>
+</head>
+<body>
+
+<header id="hdr">
+  <div class="hdr-left">
+    <button class="icon-btn" id="menu-btn" aria-label="メニュー">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <a class="logo" href="#/" aria-label="MyTube ホーム">
+      <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true"><rect width="28" height="20" rx="5" fill="#ff0033"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
+      <span>MyTube</span><sup>JP</sup>
+    </a>
+  </div>
+
+  <div id="search-wrap">
+    <form class="search-form" id="search-form" role="search" autocomplete="off">
+      <div class="search-field">
+        <input type="text" id="search-input" placeholder="検索" aria-label="検索" aria-autocomplete="list" />
+        <button type="button" class="search-clear" id="search-clear" aria-label="クリア">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <button type="submit" class="search-submit" aria-label="検索">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+    </form>
+    <button class="mic-btn only-mobile" id="mic-btn-m" aria-label="音声で検索">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>
+    </button>
+    <div class="suggest" id="suggest" role="listbox"></div>
+  </div>
+
+  <div class="hdr-right">
+    <button class="icon-btn only-mobile" id="search-open-btn" aria-label="検索">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    </button>
+    <button class="mic-btn hide-mobile" id="mic-btn" aria-label="音声で検索" style="margin-left:0">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg>
+    </button>
+    <button class="status-btn demo" id="status-btn"></button>
+    <button class="icon-btn" id="settings-btn" aria-label="設定">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="avatar-btn" id="account-btn" aria-label="アカウント">M</button>
+  </div>
+</header>
+
+<div id="mobile-search">
+  <button class="icon-btn" id="ms-back" aria-label="戻る">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m12 19-7-7 7-7M19 12H5"/></svg>
+  </button>
+  <div style="flex:1;min-width:0;position:relative">
+    <form class="search-form" id="ms-form" autocomplete="off">
+      <div class="search-field">
+        <input type="text" id="ms-input" placeholder="検索" aria-label="検索" />
+      </div>
+      <button type="submit" class="search-submit" aria-label="検索">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+    </form>
+    <div class="suggest" id="ms-suggest"></div>
+  </div>
+</div>
+
+<aside id="sidebar"></aside>
+<div id="drawer-overlay"></div>
+<aside id="drawer"></aside>
+<main id="main"></main>
+
+<div id="menu-root"></div>
+<div id="modal-root"></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   MyTube - single file YouTube client (vanilla JS)
+   ========================================================================= */
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+const esc = (s) =>
+  String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ---------- icons (lucide-style) ---------- */
+const ICONS = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  tv: '<rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  thumbsUp: '<path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/>',
+  thumbsDown: '<path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88z"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  bellRing: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/>',
+  share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  ext: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  key: '<path d="M2.6 17.4A2 2 0 0 0 2 18.83V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.17a2 2 0 0 0 1.42-.59l.81-.81a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".7"/>',
+  more: '<circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>',
+  alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+  sliders: '<path d="M21 4H14M10 4H3M21 12H12M8 12H3M21 20H16M12 20H3"/><path d="M14 2v4M8 10v4M16 18v4"/>',
+  chevL: '<path d="m15 18-6-6 6-6"/>',
+  chevR: '<path d="m9 18 6-6-6-6"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a13.16 13.16 0 0 1-1.67 2.68M6.61 6.61A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.74 9.74 0 0 0 5.39-1.61"/><path d="M2 2l20 20"/><circle cx="12" cy="12" r="3"/>',
+  sparkles: '<path d="M12 3l1.9 5.7 5.7 1.9-5.7 1.9L12 18.2l-1.9-5.7-5.7-1.9 5.7-1.9z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/>',
+  userX: '<circle cx="9" cy="7" r="4"/><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"/><path d="m17 8 5 5M22 8l-5 5"/>',
+  msgOff: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h10"/><path d="m2 2 20 20"/>',
+  link: '<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><path d="M8 12h8"/>',
+  listVideo: '<path d="M3 6h13M3 12h9M3 18h9"/><path d="m16 11 6 3-6 3z"/>',
+  play: '<path d="M6 4v16l14-8z"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  loader: '<path d="M21 12a9 9 0 1 1-6.2-8.55"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
+};
+function icon(name, size, cls) {
+  const s = size || 24;
+  return '<svg class="ic ' + (cls || "") + '" width="' + s + '" height="' + s +
+    '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    (ICONS[name] || "") + "</svg>";
+}
+
+/* ---------- formatters (ja) ---------- */
+function fmtCount(n) {
+  if (n === undefined || n === null || isNaN(n)) return "";
+  if (n < 10000) return n.toLocaleString("ja-JP");
+  if (n < 100000000) {
+    const man = n / 10000;
+    return (man < 10 ? man.toFixed(1).replace(/\.0$/, "") : Math.floor(man).toLocaleString("ja-JP")) + "万";
+  }
+  const oku = n / 100000000;
+  return (oku < 10 ? oku.toFixed(1).replace(/\.0$/, "") : Math.floor(oku).toLocaleString("ja-JP")) + "億";
+}
+function fmtViews(n) { return n === undefined || n === null ? "" : fmtCount(n) + "回視聴"; }
+function fmtSubs(n) { return n === undefined || n === null ? "" : "チャンネル登録者数 " + fmtCount(n) + "人"; }
+function timeAgo(str) {
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return "";
+  const sec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  const min = Math.floor(sec / 60), hr = Math.floor(min / 60), day = Math.floor(hr / 24);
+  const week = Math.floor(day / 7), month = Math.floor(day / 30), year = Math.floor(day / 365);
+  if (sec < 60) return "たった今";
+  if (min < 60) return min + "分前";
+  if (hr < 24) return hr + "時間前";
+  if (day < 7) return day + "日前";
+  if (week < 5) return week + "週間前";
+  if (month < 12) return month + "か月前";
+  return year + "年前";
+}
+function fmtDate(str) {
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return "";
+  return d.getFullYear() + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + String(d.getDate()).padStart(2, "0");
+}
+function isoToSecs(iso) {
+  if (iso === undefined || iso === null || iso === "") return 0;
+  if (typeof iso === "number") return Math.max(0, Math.round(iso));
+  const m = String(iso).match(/P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return 0;
+  return Number(m[1] || 0) * 86400 + Number(m[2] || 0) * 3600 + Number(m[3] || 0) * 60 + Number(m[4] || 0);
+}
+/** accepts seconds (number) or ISO 8601 duration (string) */
+function fmtDuration(d) {
+  const total = isoToSecs(d);
+  if (!total) return "";
+  const h = Math.floor(total / 3600), mi = Math.floor((total % 3600) / 60), s = total % 60;
+  return h > 0 ? h + ":" + String(mi).padStart(2, "0") + ":" + String(s).padStart(2, "0") : mi + ":" + String(s).padStart(2, "0");
+}
+/** "6 years ago" -> "6年前" (Piped returns English relative times) */
+function relTimeToJa(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+  if (/^just now$/i.test(t)) return "たった今";
+  const m = t.match(/^(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago$/i);
+  if (!m) return t;
+  const n = m[1];
+  switch (m[2].toLowerCase()) {
+    case "second": return n + "秒前";
+    case "minute": return n + "分前";
+    case "hour": return n + "時間前";
+    case "day": return n + "日前";
+    case "week": return n + "週間前";
+    case "month": return n + "か月前";
+    default: return n + "年前";
+  }
+}
+/** best-effort display text for a publish date */
+function whenText(v) {
+  if (!v) return "";
+  if (v.publishedText) return relTimeToJa(v.publishedText);
+  if (v.publishedAt) return timeAgo(v.publishedAt);
+  return "";
+}
+function dateText(v) {
+  if (!v) return "";
+  if (v.publishedAt) {
+    const d = new Date(v.publishedAt);
+    if (!isNaN(d.getTime()) && v.publishedAt.indexOf("T") > 0) return fmtDate(v.publishedAt);
+  }
+  return relTimeToJa(v.publishedText) || (v.publishedAt ? fmtDate(v.publishedAt) : "");
+}
+function hashStr(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function ytThumb(id, q) { return "https://i.ytimg.com/vi/" + id + "/" + (q || "hq") + "default.jpg"; }
+function pickThumb(t) {
+  if (!t) return "";
+  const order = ["standard", "high", "medium", "maxres", "default"];
+  for (let i = 0; i < order.length; i++) if (t[order[i]] && t[order[i]].url) return t[order[i]].url;
+  return "";
+}
+
+/* ---------- app state ---------- */
+const KEYS = { key: "mytube.apiKey", region: "mytube.region", source: "mytube.source", liveIdx: "mytube.liveIdx",
+  customHost: "mytube.customHost", hist: "mytube.history", liked: "mytube.liked",
+  later: "mytube.watchLater", subs: "mytube.subscriptions", recent: "mytube.recentSearches" };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  raw(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  setRaw(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} },
+};
+const state = {
+  apiKey: (store.raw(KEYS.key) || "").trim(),
+  region: store.raw(KEYS.region) || "JP",
+  source: store.raw(KEYS.source) || "live",
+  hist: store.get(KEYS.hist, []),
+  liked: store.get(KEYS.liked, []),
+  later: store.get(KEYS.later, []),
+  subs: store.get(KEYS.subs, []),
+  recent: store.get(KEYS.recent, []),
+};
+function saveLib(part) { store.set(KEYS[part], state[part]); }
+function hasKey() { return state.apiKey.length > 0; }
+/* data source: "live" = keyless public API (default), "official" = YouTube Data API v3, "demo" = bundled sample */
+function mode() {
+  if (state.source === "demo") return "demo";
+  if (state.source === "official") return hasKey() ? "official" : "live";
+  return hasKey() ? "official" : "live";
+}
+
+/* =========================================================================
+   DEMO DATA (real, publicly available videos - playable without an API key)
+   ========================================================================= */
+const CH_SEED = [
+["UCI6B8NkZKqlFWoiC_xE-hzA","YOASOBI",7380000,168,"@ayase_yoasobi","2019-10-01","コンポーザーのAyaseとボーカルのikuraからなる「小説を音楽にするユニット」YOASOBI の公式チャンネル。"],
+["UC_mock_yonezu","Kenshi Yonezu 米津玄師",8420000,96,"@KenshiYonezu","2009-10-04","米津玄師 Official YouTube Channel"],
+["UC_mock_daoko","daoko_jp",1230000,112,"","2012-05-18",""],
+["UC_mock_lisa","LiSA Official YouTube",3460000,301,"","2011-01-27",""],
+["UC_mock_ado","Ado",8010000,142,"@Ado1024","2020-10-23","歌い手・Adoの公式チャンネル。"],
+["UC_mock_kinggnu","King Gnu official YouTube channel",3210000,88,"","2017-04-14",""],
+["UC_mock_higedan","Official髭男dism",4360000,231,"","2014-06-05",""],
+["UC_mock_aimyon","あいみょん",2870000,120,"","2015-03-11",""],
+["UC_mock_creepynuts","Creepy Nuts",1560000,160,"","2015-07-22",""],
+["UC_mock_yuuri","優里 Official YouTube Channel",2020000,190,"","2019-05-10",""],
+["UC_mock_radwimps","RADWIMPS",2950000,240,"","2010-02-09",""],
+["UCuAXFkgsw1L7xaCfnd5JJOw","Rick Astley",4120000,230,"@RickAstleyYT","2015-02-01","The official Rick Astley YouTube channel."],
+["UCrDkAvwZum-UTjHmzDI2iIw","officialpsy",19200000,300,"","2010-10-05",""],
+["UCxoq-PAQeAdk_zyg8YS0JqA","LuisFonsiVEVO",35100000,110,"","2009-09-24",""],
+["UC0C-w0YjGpqDXGB8IHb662A","Ed Sheeran",56300000,400,"@EdSheeran","2006-08-09",""],
+["UCiMhD4jzUqG-IgPzUmmytRQ","Queen Official",17400000,520,"","2008-07-28",""],
+["UComP_epzeKzvBX156r6pm1Q","Adele",32000000,90,"","2007-11-13",""],
+["UCJrOtniJ0-NWz37R30urifQ","Alan Walker",45200000,700,"","2012-08-07",""],
+["UCT9zcQNlyht7fRlcjmflRSA","ImagineDragonsVEVO",28300000,140,"","2011-11-09",""],
+["UC5OrDvL9DscpcAstz7JnQGA","michaeljacksonVEVO",40100000,160,"","2009-09-01",""],
+["UCZU9T1ceaOgwfLRq7OKFU4Q","Linkin Park",17500000,410,"","2006-03-28",""],
+["UC_mock_markronson","MarkRonsonVEVO",4640000,60,"","2009-04-17",""],
+["UCqECaJ8Gagnn7YCbPEzWH6g","Taylor Swift",60200000,260,"@TaylorSwift","2006-09-20",""],
+["UCSJ4gkVC6NrvII8umztf0Ow","Lofi Girl",14500000,520,"@LofiGirl","2015-03-18","Lofi Girl - the home of lofi hip hop radio. 24/7 live streams to relax, study and chill to."],
+["UCYO_jab_esuFRV4b17AJtAw","3Blue1Brown",6540000,180,"@3blue1brown","2015-03-04","数学を視覚的に、直感的に理解するためのアニメーション動画。"],
+["UCsXVk37bltHxD1rDPwtNM8Q","Kurzgesagt – In a Nutshell",23100000,210,"@kurzgesagt","2013-07-09",""],
+["UCLA_DiR1FfKNvjuUpBHmylQ","NASA",12300000,5400,"@NASA","2008-07-14",""],
+["UCAuUUnT6oDeKwE6v1NGQxug","TED",25200000,4900,"@TED","2006-12-06",""],
+["UCHnyfMqiRRG1u-2MsSQLbXA","Veritasium",17200000,420,"@veritasium","2010-07-21",""],
+["UCsBjURrPoezykLs9EqgamOA","Fireship",3580000,700,"@Fireship","2017-04-07","High-intensity code tutorials and tech news."],
+["UCX6OQ3DkcsbYNE6H8uQQuVA","MrBeast",350000000,850,"@MrBeast","2012-02-20",""],
+["UCSMOQeBJ2RAnuFungnQOxLg","Blender",1340000,1200,"@BlenderOfficial","2006-05-16",""],
+["UC4QobU6STFB0P71PMvOGN5A","jawed",5560000,1,"@jawed","2005-04-23",""],
+["UCcdwLMPsaU2ezNSJU1nFoBQ","Baby Shark - Pinkfong Kids’ Songs & Stories",80100000,3000,"","2011-12-14",""],
+["UC_mock_schwarz","Jacob + Katie Schwarz",1010000,60,"","2011-05-05",""],
+["UC_mock_judson","Judson Laipply",152000,30,"","2006-04-06",""],
+["UC_mock_minecraft","Minecraft",12200000,800,"@Minecraft","2010-12-06",""],
+["UC_mock_rockstar","Rockstar Games",8120000,400,"@RockstarGames","2006-12-04",""],
+["UC_mock_nintendo","Nintendo of America",10300000,4200,"@NintendoAmerica","2007-01-27",""],
+["UC_mock_bandai","BANDAI NAMCO Europe",905000,2300,"","2009-02-03",""],
+["UC_mock_cyberpunk","Cyberpunk 2077",2050000,300,"","2012-10-19",""],
+["UC_mock_realsbstn","realsbstn",52000,12,"","2009-08-16",""],
+["UC_mock_talkinganimals","Talking Animals",1020000,90,"","2011-05-01",""],
+["UC_mock_keyboardcat","Keyboard Cat!",410000,40,"","2007-06-07",""],
+["UC_mock_schroter","John Schroter",104000,20,"","2013-10-08",""],
+["UC_mock_bostondynamics","Boston Dynamics",4520000,150,"@BostonDynamics","2008-11-17",""],
+["UC_mock_bobross","Bob Ross",6020000,410,"@bobross_thejoyofpainting","2011-04-01",""],
+];
+
+const CH_DESC_FALLBACK = "の公式チャンネルです。最新動画やお知らせをお届けします。";
+const CHANNELS = CH_SEED.map(function (r) {
+  return { id: r[0], title: r[1], subscriberCount: r[2], videoCount: r[3], customUrl: r[4], publishedAt: r[5],
+    description: r[6] || (r[1] + CH_DESC_FALLBACK), thumbnail: "", banner: "" };
+});
+const CH_BY_ID = {};
+CHANNELS.forEach(function (c) { CH_BY_ID[c.id] = c; });
+
+/* [id, title, channelId, publishedAt, views, likes, comments, duration, categoryId, tags, description, live] */
+const V_SEED = [
+["x8VYWazR5mE","YOASOBI「夜に駆ける」 Official Music Video","UCI6B8NkZKqlFWoiC_xE-hzA","2019-11-16T10:00:00Z",312000000,2300000,98000,"PT4M23S","10","YOASOBI,夜に駆ける,J-POP,アニメーション,音楽","YOASOBI 1st Single「夜に駆ける」\n原作小説：星野舞夜「タナトスの誘惑」\n\nMusic: Ayase\nVocal: ikura\nIllustration & Animation: 藍にいな\n\n配信リンク▶ https://orcd.co/yoasobi_yorunikakeru",0],
+["ZRtdQ81jPUQ","YOASOBI「アイドル」 Official Music Video","UCI6B8NkZKqlFWoiC_xE-hzA","2023-04-12T10:00:00Z",528000000,4100000,210000,"PT3M34S","10","YOASOBI,アイドル,推しの子,アニメ,音楽","TVアニメ『【推しの子】』オープニング主題歌\n原作：赤坂アカ「45510」\n\nMusic: Ayase\nVocal: ikura\n\n配信リンク▶ https://orcd.co/yoasobi_idol",0],
+["Y4nEEZwckuU","YOASOBI「群青」Official Music Video","UCI6B8NkZKqlFWoiC_xE-hzA","2020-09-01T10:00:00Z",238000000,1500000,56000,"PT4M27S","10","YOASOBI,群青,ブルーピリオド,音楽","YOASOBI「群青」\n原作：山口つばさ「ブルーピリオド」\n\nMusic: Ayase\nVocal: ikura",0],
+["SX_ViT4Ra7k","米津玄師 Kenshi Yonezu - Lemon","UC_mock_yonezu","2018-02-26T10:00:00Z",860000000,5200000,320000,"PT4M36S","10","米津玄師,Lemon,アンナチュラル,J-POP","TBS金曜ドラマ「アンナチュラル」主題歌\n\n作詞・作曲・編曲：米津玄師\nDirector: Yoshiyuki Yamaguchi",0],
+["M2cckDmNLMI","米津玄師 Kenshi Yonezu - KICK BACK","UC_mock_yonezu","2022-10-12T10:00:00Z",325000000,2800000,140000,"PT3M34S","10","米津玄師,KICK BACK,チェンソーマン,アニメ","TVアニメ「チェンソーマン」オープニング・テーマ\n\n作詞・作曲：米津玄師\n編曲：米津玄師・常田大希",0],
+["-tKVN2mAKRI","DAOKO × 米津玄師『打上花火』MUSIC VIDEO","UC_mock_daoko","2017-08-16T10:00:00Z",568000000,3100000,150000,"PT4M50S","10","DAOKO,米津玄師,打上花火,アニメ映画","アニメーション映画『打ち上げ花火、下から見るか？横から見るか？』主題歌\n\n作詞・作曲：米津玄師",0],
+["CwkzK-F0Y00","LiSA 『紅蓮華』 -MUSiC CLiP YouTube EDIT ver.-","UC_mock_lisa","2019-07-04T10:00:00Z",345000000,2400000,110000,"PT4M8S","10","LiSA,紅蓮華,鬼滅の刃,アニソン","TVアニメ「鬼滅の刃」オープニングテーマ\n\n作詞：LiSA 作曲：草野華余子 編曲：江口亮",0],
+["Qp3b-RXtz4w","【Ado】うっせぇわ","UC_mock_ado","2020-10-23T10:00:00Z",318000000,2900000,260000,"PT3M26S","10","Ado,うっせぇわ,syudou,ボカロ","作詞・作曲・編曲：syudou\n歌：Ado\nIllustration：WOOMA",0],
+["1FliVTcX8bQ","【Ado】新時代 (ウタ from ONE PIECE FILM RED)","UC_mock_ado","2022-06-08T10:00:00Z",352000000,2600000,120000,"PT3M40S","10","Ado,新時代,ONE PIECE,ウタ","『ONE PIECE FILM RED』主題歌\n作詞・作曲・編曲：中田ヤスタカ\n歌：Ado",0],
+["ony539T074w","King Gnu - 白日","UC_mock_kinggnu","2019-02-22T10:00:00Z",512000000,2700000,130000,"PT4M45S","10","King Gnu,白日,イノセンス,J-ROCK","日本テレビ系土曜ドラマ「イノセンス 冤罪弁護士」主題歌\n\nDirector : OSRIN (PERIMETRON)",0],
+["TQ8WlA2GXbk","Official髭男dism - Pretender［Official Video］","UC_mock_higedan","2019-04-17T10:00:00Z",535000000,2500000,95000,"PT5M31S","10","Official髭男dism,Pretender,コンフィデンスマンJP,J-POP","映画『コンフィデンスマンJP』主題歌\n\n作詞・作曲：藤原聡\n編曲：Official髭男dism",0],
+["0xSiBpUdW4E","あいみょん - マリーゴールド【OFFICIAL MUSIC VIDEO】","UC_mock_aimyon","2018-08-08T10:00:00Z",480000000,2100000,72000,"PT5M10S","10","あいみょん,マリーゴールド,J-POP,弾き語り","あいみょん 5th Single「マリーゴールド」\n\n作詞・作曲：あいみょん\n編曲：立崎優介・田中ユウスケ",0],
+["mLW35YMzELE","Creepy Nuts「Bling-Bang-Bang-Born」× TV Anime「マッシュル-MASHLE-」Collaboration Music Video #BBBBダンス","UC_mock_creepynuts","2024-01-07T10:00:00Z",325000000,3400000,160000,"PT2M53S","10","Creepy Nuts,Bling-Bang-Bang-Born,マッシュル,BBBBダンス,ヒップホップ","TVアニメ「マッシュル-MASHLE-」神覚者候補選抜試験編 オープニング主題歌\n\n作詞：R-指定 作曲：DJ松永",0],
+["kzZ6KXDM1RI","優里『ドライフラワー』Official Music Video -ディレクターズカットver.-","UC_mock_yuuri","2020-10-25T10:00:00Z",342000000,1600000,48000,"PT4M55S","10","優里,ドライフラワー,バラード,J-POP","優里 2nd Digital Single「ドライフラワー」\n\n作詞・作曲：優里",0],
+["PDSkFeMVNFs","RADWIMPS - 前前前世 (movie ver.) [Official Music Video]","UC_mock_radwimps","2016-08-25T10:00:00Z",462000000,2000000,110000,"PT4M46S","10","RADWIMPS,前前前世,君の名は。,新海誠","映画『君の名は。』主題歌\n\n作詞・作曲：野田洋次郎",0],
+["dQw4w9WgXcQ","Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)","UCuAXFkgsw1L7xaCfnd5JJOw","2009-10-25T06:57:33Z",1620000000,18000000,2300000,"PT3M33S","10","Rick Astley,Never Gonna Give You Up,80s,pop,rickroll","The official video for “Never Gonna Give You Up” by Rick Astley.\n\nNever: The Autobiography OUT NOW!\n\nFollow Rick Astley:\nFacebook: https://RickAstley.lnk.to/FBFollow",0],
+["9bZkp7q19f0","PSY - GANGNAM STYLE(강남스타일) M/V","UCrDkAvwZum-UTjHmzDI2iIw","2012-07-15T07:46:32Z",5300000000,29000000,5600000,"PT4M13S","10","PSY,Gangnam Style,K-POP,강남스타일","PSY - ‘I LUV IT’ M/V @ https://youtu.be/Xvjnoagk6GU\nPSY - ‘New Face’ M/V @ https://youtu.be/OwJPPaEyqhI",0],
+["kJQP7kiw5Fk","Luis Fonsi - Despacito ft. Daddy Yankee","UCxoq-PAQeAdk_zyg8YS0JqA","2017-01-12T15:00:00Z",8600000000,54000000,4100000,"PT4M42S","10","Luis Fonsi,Despacito,Daddy Yankee,latin,reggaeton","“Despacito” disponible ya en todas las plataformas digitales: https://UMLE.lnk.to/DOoUzFp",0],
+["JGwWNGJdvx8","Ed Sheeran - Shape of You (Official Music Video)","UC0C-w0YjGpqDXGB8IHb662A","2017-01-30T10:00:00Z",6300000000,33000000,1500000,"PT4M24S","10","Ed Sheeran,Shape of You,Divide,pop","The official music video for Ed Sheeran - Shape Of You\n\nTaken from the studio album ÷ (divide) released in 2017.",0],
+["fJ9rUzIMcZQ","Queen – Bohemian Rhapsody (Official Video Remastered)","UCiMhD4jzUqG-IgPzUmmytRQ","2008-08-01T11:06:40Z",1900000000,14000000,480000,"PT5M59S","10","Queen,Bohemian Rhapsody,Freddie Mercury,rock,classic rock","Taken from A Night At The Opera, 1975.\n\nClick here to buy the DVD with this video at the Official Queen Store: http://www.queenonlinestore.com",0],
+["YQHsXMglC9A","Adele - Hello (Official Music Video)","UComP_epzeKzvBX156r6pm1Q","2015-10-22T23:00:00Z",3200000000,17000000,880000,"PT6M7S","10","Adele,Hello,25,ballad","‘Hello' is taken from the new album, 25, out November 20.\n\nDirected by Xavier Dolan",0],
+["60ItHLz5WEA","Alan Walker - Faded","UCJrOtniJ0-NWz37R30urifQ","2015-12-03T16:00:00Z",3600000000,23000000,1100000,"PT3M33S","10","Alan Walker,Faded,EDM,electronic","Listen to “Faded” on Spotify: https://open.spotify.com/\n\nOn this day in 2015, I released 'Faded'. Thank you for all the support.",0],
+["7wtfhZwyrcc","Imagine Dragons - Believer (Official Music Video)","UCT9zcQNlyht7fRlcjmflRSA","2017-03-07T15:00:00Z",2800000000,17000000,480000,"PT3M37S","10","Imagine Dragons,Believer,Evolve,alternative rock","Get Evolve, ft. ‘Believer,’ ‘Thunder,’ ‘Whatever It Takes’ and ‘Walking The Wire,’ out now: http://smarturl.it/EVOLVE",0],
+["Zi_XLOBDo_Y","Michael Jackson - Billie Jean (Official Video)","UC5OrDvL9DscpcAstz7JnQGA","2009-10-03T00:50:16Z",1500000000,9800000,420000,"PT4M55S","10","Michael Jackson,Billie Jean,Thriller,80s","Michael Jackson's official music video for \"Billie Jean\"\n\nListen to more Michael Jackson: https://MichaelJackson.lnk.to/Stream!to",0],
+["kXYiU_JCYtU","Numb (Official Music Video) [4K UPGRADE] – Linkin Park","UCZU9T1ceaOgwfLRq7OKFU4Q","2007-03-05T08:00:00Z",2200000000,13000000,620000,"PT3M8S","10","Linkin Park,Numb,Meteora,rock,nu metal","Numb (Official Music Video) [4K UPGRADE] – Linkin Park\n\nMeteora 20th Anniversary Edition out now.",0],
+["OPf0YbXqDm0","Mark Ronson - Uptown Funk (Official Video) ft. Bruno Mars","UC_mock_markronson","2014-11-19T14:00:00Z",5400000000,24000000,790000,"PT4M31S","10","Mark Ronson,Bruno Mars,Uptown Funk,funk,pop","Mark Ronson's official music video for 'Uptown Funk' ft. Bruno Mars.",0],
+["nfWlot6h_JM","Taylor Swift - Shake It Off","UCqECaJ8Gagnn7YCbPEzWH6g","2014-08-18T20:00:00Z",3400000000,15000000,700000,"PT4M2S","10","Taylor Swift,Shake It Off,1989,pop","Music video by Taylor Swift performing Shake It Off. (C) 2014 Big Machine Records, LLC.",0],
+["jfKfPfyJRdk","lofi hip hop radio 📚 beats to relax/study to","UCSJ4gkVC6NrvII8umztf0Ow","2022-07-12T12:12:29Z",1700000000,7000000,0,"PT0S","10","lofi,lo-fi,作業用BGM,study,chill,radio","🎧 Lofi Girl on all social media: https://lofigirl.com/\n\nListen to the playlist on all platforms: https://bit.ly/lofigirl-playlist\n\n📝 24/7 live stream, 作業用・勉強用にどうぞ。",1],
+["aircAruvnKk","But what is a neural network? | Deep learning chapter 1","UCYO_jab_esuFRV4b17AJtAw","2017-10-05T19:00:00Z",18500000,450000,9800,"PT18M40S","27","neural network,deep learning,機械学習,数学,AI,プログラミング","What are the neurons, why are there layers, and what is the math underlying it?\n\nHelp fund future projects: https://www.patreon.com/3blue1brown\n\nTimestamps:\n0:00 - Introduction\n1:07 - Series preview\n2:42 - What are neurons?",0],
+["h6fcK_fRYaI","The Egg - A Short Story","UCsXVk37bltHxD1rDPwtNM8Q","2019-09-01T13:00:00Z",37000000,1800000,140000,"PT7M56S","27","Kurzgesagt,The Egg,Andy Weir,philosophy,アニメーション","The Egg\nStory by Andy Weir, Animated by Kurzgesagt\n\nA short story about you, the universe, and everything in between.",0],
+["4czjS9h4Fpg","Perseverance Rover’s Descent and Touchdown on Mars (Official NASA Video)","UCLA_DiR1FfKNvjuUpBHmylQ","2021-02-22T20:00:00Z",18000000,520000,44000,"PT3M25S","28","NASA,Mars,Perseverance,火星,宇宙,science","NASA’s Mars 2020 Perseverance mission captured thrilling footage of its rover landing in Mars' Jezero Crater on Feb. 18, 2021.",0],
+["iG9CE55wbtY","Do schools kill creativity? | Sir Ken Robinson | TED","UCAuUUnT6oDeKwE6v1NGQxug","2007-01-07T04:08:17Z",23000000,300000,11000,"PT20M4S","27","TED,Ken Robinson,education,creativity,教育","Sir Ken Robinson makes an entertaining and profoundly moving case for creating an education system that nurtures (rather than undermines) creativity.",0],
+["rhgwIhB58PA","The Biggest Myth In Education","UCHnyfMqiRRG1u-2MsSQLbXA","2021-07-09T15:00:00Z",15000000,500000,28000,"PT14M7S","27","Veritasium,learning styles,education,science,教育","You are not a visual learner — learning styles are a stubborn myth.",0],
+["-uleG_Vecis","100+ Computer Science Concepts Explained","UCsBjURrPoezykLs9EqgamOA","2022-05-03T14:00:00Z",3100000,150000,4200,"PT13M8S","28","Fireship,computer science,プログラミング,programming,tech","Learn the fundamentals of Computer Science with a quick breakdown of jargon that every software engineer should know. Over 100 technical concepts explained in 13 minutes.",0],
+["MnrJzXM7a6o","Steve Jobs introduces iPhone in 2007","UC_mock_schroter","2013-10-08T22:00:00Z",40000000,320000,27000,"PT10M20S","28","Steve Jobs,iPhone,Apple,keynote,テクノロジー","Steve Jobs introduces the original iPhone at Macworld 2007. \"Every once in a while a revolutionary product comes along that changes everything.\"",0],
+["tF4DML7FIWk","Atlas | Partners in Parkour","UC_mock_bostondynamics","2021-08-17T13:00:00Z",40000000,650000,42000,"PT1M4S","28","Boston Dynamics,Atlas,robot,ロボット,parkour","Parkour is the perfect sandbox for the Atlas team at Boston Dynamics to experiment with new behaviors.",0],
+["fn3KWM1kuAw","Do You Love Me?","UC_mock_bostondynamics","2020-12-29T14:00:00Z",39000000,700000,48000,"PT2M54S","28","Boston Dynamics,Spot,Atlas,dance,ロボット","Our whole crew got together to celebrate the start of what we hope will be a happier year: Happy New Year from all of us at Boston Dynamics.",0],
+["0e3GPea1Tyg","$456,000 Squid Game In Real Life!","UCX6OQ3DkcsbYNE6H8uQQuVA","2021-11-24T21:00:00Z",660000000,17000000,800000,"PT25M42S","24","MrBeast,Squid Game,イカゲーム,challenge","I spent $3.5 million recreating every scene from Squid Game. 456 contestants competed for $456,000.",0],
+["aqz-KE-bpKQ","Big Buck Bunny 60fps 4K - Official Blender Foundation Short Film","UCSMOQeBJ2RAnuFungnQOxLg","2014-11-10T14:00:00Z",20000000,130000,6000,"PT10M35S","1","Blender,Big Buck Bunny,animation,short film,アニメーション,3DCG","Big Buck Bunny tells the story of a giant rabbit with a heart bigger than himself. Made entirely with open source software.\n\nhttps://peach.blender.org",0],
+["jNQXAC9IVRw","Me at the zoo","UC4QobU6STFB0P71PMvOGN5A","2005-04-24T03:31:52Z",330000000,16000000,12000000,"PT19S","22","zoo,elephants,first video,YouTube history","The first video on YouTube. While you wait for Part 2, listen to this great song: https://www.youtube.com/watch?v=dQw4w9WgXcQ",0],
+["dMH0bHeiRNg","Evolution of Dance","UC_mock_judson","2006-04-06T21:00:00Z",310000000,1300000,180000,"PT6M1S","23","dance,comedy,Judson Laipply,ダンス,コメディ","The original Evolution of Dance by Judson Laipply — once the most viewed video on YouTube.",0],
+["XqZsoesa55w","Baby Shark Dance | #babyshark Most Viewed Video | Animal Songs | PINKFONG Songs for Children","UCcdwLMPsaU2ezNSJU1nFoBQ","2016-06-17T05:00:00Z",15000000000,45000000,0,"PT2M17S","27","Baby Shark,Pinkfong,kids,子供向け,童謡","Baby Shark Dance is the most viewed video on YouTube! Sing and dance along with Pinkfong.",0],
+["LXb3EKWsInQ","COSTA RICA IN 4K 60fps HDR (ULTRA HD)","UC_mock_schwarz","2017-01-04T18:00:00Z",160000000,1100000,40000,"PT5M13S","19","Costa Rica,4K,nature,travel,自然,旅行,HDR","Filmed in Costa Rica in 4K 60fps HDR. Shot on the RED Weapon 8K.",0],
+["lLWEXRAnQd0","Bob Ross - Island in the Wilderness (Season 29 Episode 1)","UC_mock_bobross","2016-03-10T19:00:00Z",55000000,700000,35000,"PT27M40S","26","Bob Ross,painting,絵画,ハウツー,relax,The Joy of Painting","Season 29 of The Joy of Painting with Bob Ross features the following wonderful painting instructions: Island in the Wilderness.",0],
+["MmB9b5njVbA","Official Minecraft Trailer","UC_mock_minecraft","2011-12-06T14:00:00Z",60000000,600000,50000,"PT1M54S","20","Minecraft,マインクラフト,trailer,game","The official trailer for Minecraft. Minecraft is a game about placing blocks and going on adventures.",0],
+["QkkoHAzjnUs","Grand Theft Auto V Trailer","UC_mock_rockstar","2011-11-02T15:00:00Z",90000000,600000,110000,"PT1M25S","20","GTA V,GTA5,Rockstar,trailer,ゲーム","The first trailer for Grand Theft Auto V. Los Santos, a sprawling sun-soaked metropolis.",0],
+["1rPxiXXxftE","The Legend of Zelda: Breath of the Wild - Official Game Trailer - Nintendo E3 2016","UC_mock_nintendo","2016-06-14T16:40:00Z",35000000,420000,60000,"PT3M50S","20","Zelda,ゼルダの伝説,Breath of the Wild,Nintendo,Switch","Forget everything you know about The Legend of Zelda games. Step into a world of discovery, exploration and adventure.",0],
+["JldMvQMO_5U","ELDEN RING - Gameplay Preview","UC_mock_bandai","2021-11-04T14:00:00Z",8000000,170000,12000,"PT15M32S","20","Elden Ring,エルデンリング,FromSoftware,gameplay","Rise, Tarnished, and be guided by grace to brandish the power of the Elden Ring and become an Elden Lord in the Lands Between.",0],
+["8X2kIfS6fb8","Cyberpunk 2077 — Official E3 2018 Trailer","UC_mock_cyberpunk","2018-06-10T22:30:00Z",30000000,800000,90000,"PT2M31S","20","Cyberpunk 2077,サイバーパンク,CD Projekt,trailer","Cyberpunk 2077 is an open-world, action-adventure story set in Night City, a megalopolis obsessed with power, glamour and body modification.",0],
+["3nbjhpcZ9_g","Usain Bolt 9.58 100m New World Record Berlin [HQ]","UC_mock_realsbstn","2009-08-16T20:00:00Z",50000000,350000,40000,"PT4M11S","17","Usain Bolt,100m,world record,陸上,スポーツ,ウサイン・ボルト","Usain Bolt sets the 100m world record of 9.58 seconds at the 2009 World Championships in Berlin.",0],
+["nGeKSiCQkPw","Ultimate Dog Tease","UC_mock_talkinganimals","2011-05-01T18:00:00Z",210000000,1200000,150000,"PT1M21S","15","dog,犬,funny,talking animals,ペット","Dogs can be real jerks sometimes... Voice by Andrew Grantham.",0],
+["J---aiyznGQ","Keyboard Cat! - THE ORIGINAL!","UC_mock_keyboardcat","2007-06-07T17:00:00Z",70000000,500000,60000,"PT54S","15","cat,猫,keyboard cat,meme,ペット","The original Keyboard Cat video from 1984, starring Fatso.",0],
+];
+const VIDEOS = V_SEED.map(function (r) {
+  const ch = CH_BY_ID[r[2]];
+  return { id: r[0], title: r[1], channelId: r[2], channelTitle: ch ? ch.title : "Unknown",
+    channelThumbnail: "", thumbnail: ytThumb(r[0], "hq"), publishedAt: r[3], publishedText: "",
+    viewCount: r[4], likeCount: r[5], commentCount: r[6], durationSec: isoToSecs(r[7]),
+    categoryId: r[8], tags: r[9] ? r[9].split(",") : [],
+    description: r[10], isLive: !!r[11] };
+});
+
+const CMT_TEXTS = [
+"何回見ても鳥肌が立つ。{year}年になっても聴いてる人いる？",
+"この動画を初めて見た日のことを今でも覚えてる。",
+"イントロの時点で名作だとわかる。",
+"{n}回目の視聴です。全く飽きない。",
+"サムネに惹かれて来たけど想像の100倍良かった。",
+"日本から見てます！素晴らしい動画をありがとう🇯🇵",
+"この動画のおかげで勉強のモチベが上がりました。",
+"作業用に毎日流してます。最高。",
+"{ts} からの展開が神すぎる。",
+"コメント欄が優しい世界で好き。",
+"{year}年に見てる人👍",
+"これが無料で見られる時代に感謝。",
+"画質も音質も最高。ぜひ4Kで見てほしい。",
+"友達に勧められて来ました。完全にハマりました。",
+"編集のテンポが良くて最後まで一気に見ちゃった。",
+"久しぶりに見に来たけどやっぱり良い。",
+"子どもの頃に見てたのを思い出して泣きそう。",
+"字幕つけてくれてるの助かる！",
+"この人の他の動画も全部見ました。おすすめです。",
+"寝る前に必ず見る動画。安心する。",
+];
+const CMT_AUTHORS = ["たろう","music_lover_jp","ゆき","Ken Watanabe","みかん🍊","Sora","ハルカ","nao_tech","Lisa M","あおい","kazu_0921","りんご飴","Yuto","mochi","ひな","Takeshi","さくら","night_owl","Mei","koji.dev"];
+
+/* =========================================================================
+   API LAYER (real YouTube Data API v3 + demo fallback)
+   ========================================================================= */
+function ApiError(msg, status, reason) {
+  this.name = "ApiError";
+  this.message = msg || "error";
+  this.status = status || 0;
+  this.reason = reason || "unknown";
+}
+ApiError.prototype = Object.create(Error.prototype);
+
+const memCache = {};
+function cacheGet(k) {
+  const hit = memCache[k];
+  if (hit && hit.exp > Date.now()) return hit.data;
+  try {
+    const raw = sessionStorage.getItem("mt:" + k);
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p.exp > Date.now()) { memCache[k] = p; return p.data; }
+      sessionStorage.removeItem("mt:" + k);
+    }
+  } catch (e) {}
+  return undefined;
+}
+function cacheSet(k, d, ttl) {
+  const p = { exp: Date.now() + (ttl || 900000), data: d };
+  memCache[k] = p;
+  try { sessionStorage.setItem("mt:" + k, JSON.stringify(p)); } catch (e) {}
+}
+function clearCache() {
+  Object.keys(memCache).forEach(function (k) { delete memCache[k]; });
+  try {
+    Object.keys(sessionStorage).filter(function (k) { return k.indexOf("mt:") === 0; })
+      .forEach(function (k) { sessionStorage.removeItem(k); });
+  } catch (e) {}
+}
+function describeError(err) {
+  const reason = err && err.reason ? err.reason : "unknown";
+  const msg = err && err.message ? err.message : "";
+  const low = msg.toLowerCase();
+  if (reason === "quotaExceeded" || reason === "dailyLimitExceeded" || reason === "rateLimitExceeded")
+    return { title: "APIの利用上限に達しました",
+      detail: "YouTube Data API の1日あたりのクォータ（10,000ユニット）を使い切りました。",
+      hint: "太平洋時間の午前0時にリセットされます。別のAPIキーを設定するか、しばらく待ってから再試行してください。" };
+  if (reason === "keyInvalid" || reason === "badRequest")
+    return low.indexOf("api key") >= 0
+      ? { title: "APIキーが無効です", detail: msg, hint: "Google Cloud Console で作成したAPIキーを正しく貼り付けたか確認してください。" }
+      : { title: "リクエストが不正です", detail: msg };
+  if (reason === "accessNotConfigured")
+    return { title: "YouTube Data API v3 が有効になっていません", detail: msg,
+      hint: "Google Cloud Console の「APIとサービス > ライブラリ」で YouTube Data API v3 を有効にしてください。" };
+  if (reason === "ipRefererBlocked" || reason === "refererBlocked")
+    return { title: "APIキーの制限によりブロックされました", detail: msg,
+      hint: "APIキーの「アプリケーションの制限」でこのサイトのURLを許可するか、制限を解除してください。" };
+  if (reason === "forbidden") return { title: "アクセスが拒否されました", detail: msg };
+  if (reason === "commentsDisabled") return { title: "この動画ではコメントがオフになっています" };
+  if (reason === "videoNotFound" || reason === "notFound") return { title: "コンテンツが見つかりませんでした", detail: msg };
+  if (reason === "noKey") return { title: "APIキーが設定されていません", hint: "右上の設定からAPIキーを登録してください。" };
+  if (reason === "network") return { title: "ネットワークエラー", detail: "YouTube API に接続できませんでした。",
+    hint: "インターネット接続と広告ブロッカーの設定を確認してください。" };
+  return { title: "エラーが発生しました", detail: msg ? msg + " (" + reason + ")" : reason };
+}
+
+function withBannerCrop(url) {
+  if (!url || url.indexOf("http") !== 0) return url;
+  return url + "=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj";
+}
+function num(v) { const n = Number(v); return v === undefined || v === null || isNaN(n) ? undefined : n; }
+function mapVideo(raw) {
+  const s = raw.snippet || {};
+  return { id: raw.id, title: s.title || "", description: s.description || "", thumbnail: pickThumb(s.thumbnails),
+    channelId: s.channelId || "", channelTitle: s.channelTitle || "", publishedAt: s.publishedAt || "",
+    viewCount: num(raw.statistics && raw.statistics.viewCount), likeCount: num(raw.statistics && raw.statistics.likeCount),
+    commentCount: num(raw.statistics && raw.statistics.commentCount),
+    durationSec: isoToSecs(raw.contentDetails && raw.contentDetails.duration), tags: s.tags || [],
+    categoryId: s.categoryId, isLive: s.liveBroadcastContent === "live" };
+}
+function mapSearchItem(raw) {
+  const s = raw.snippet || {};
+  return { id: (raw.id && raw.id.videoId) || "", title: s.title || "", description: s.description || "",
+    thumbnail: pickThumb(s.thumbnails), channelId: s.channelId || "", channelTitle: s.channelTitle || "",
+    publishedAt: s.publishedAt || "", tags: [], isLive: s.liveBroadcastContent === "live" };
+}
+function mapChannel(raw) {
+  const s = raw.snippet || {}, st = raw.statistics || {};
+  return { id: raw.id, title: s.title || "", description: s.description || "", thumbnail: pickThumb(s.thumbnails),
+    banner: withBannerCrop(raw.brandingSettings && raw.brandingSettings.image && raw.brandingSettings.image.bannerExternalUrl),
+    customUrl: s.customUrl || "", subscriberCount: st.hiddenSubscriberCount ? undefined : num(st.subscriberCount),
+    videoCount: num(st.videoCount), viewCount: num(st.viewCount), publishedAt: s.publishedAt || "" };
+}
+function mapComment(raw) {
+  const c = (raw.snippet && raw.snippet.topLevelComment && raw.snippet.topLevelComment.snippet) || {};
+  return { id: raw.id, authorName: c.authorDisplayName || "", authorAvatar: c.authorProfileImageUrl || "",
+    authorChannelId: c.authorChannelId && c.authorChannelId.value,
+    text: c.textOriginal || c.textDisplay || "", likeCount: c.likeCount || 0, publishedAt: c.publishedAt || "",
+    replyCount: (raw.snippet && raw.snippet.totalReplyCount) || 0 };
+}
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function ytRequest(ep, params, opt) {
+  opt = opt || {};
+  const key = opt.key || state.apiKey;
+  if (!key) throw new ApiError("APIキーが設定されていません", 0, "noKey");
+  const u = new URL("https://www.googleapis.com/youtube/v3/" + ep);
+  Object.keys(params).forEach(function (k) {
+    const v = params[k];
+    if (v !== undefined && v !== null && v !== "") u.searchParams.set(k, String(v));
+  });
+  const ck = ep + "?" + u.searchParams.toString();
+  if (!opt.noCache) {
+    const cached = cacheGet(ck);
+    if (cached !== undefined) return cached;
+  }
+  u.searchParams.set("key", key);
+  let res;
+  try { res = await fetch(u.toString()); }
+  catch (e) { throw new ApiError("ネットワークエラー", 0, "network"); }
+  if (!res.ok) {
+    let msg = "HTTP " + res.status;
+    let reason = res.status === 403 ? "forbidden" : res.status === 404 ? "notFound" : "unknown";
+    try {
+      const b = await res.json();
+      if (b && b.error) {
+        msg = b.error.message || msg;
+        reason = (b.error.errors && b.error.errors[0] && b.error.errors[0].reason) || b.error.status || reason;
+      }
+    } catch (e) {}
+    throw new ApiError(msg, res.status, reason);
+  }
+  const data = await res.json();
+  if (!opt.noCache) cacheSet(ck, data, opt.ttl);
+  return data;
+}
+
+/* =========================================================================
+   LIVE BACKEND — keyless public API (Piped) + oEmbed, with failover
+   ========================================================================= */
+const LIVE_HOSTS = ["https://api.piped.private.coffee", "https://pipedapi.ducks.party", "https://pipedapi.reallyaweso.me"];
+const HOME_MORE_QUERIES = ["人気の動画", "音楽 MV", "ゲーム実況", "面白い動画", "ニュース", "スポーツ ハイライト",
+  "料理 レシピ", "旅行 絶景 4K", "テクノロジー 解説", "アニメ PV", "ヴァラエティ", "科学 実験"];
+let liveIdx = 0;
+let liveDown = false;
+(function initLive() {
+  const custom = store.get(KEYS.customHost, "");
+  if (custom && LIVE_HOSTS.indexOf(custom) < 0) LIVE_HOSTS.unshift(custom);
+  const saved = Number(store.raw(KEYS.liveIdx));
+  if (saved >= 0 && saved < LIVE_HOSTS.length) liveIdx = saved;
+})();
+function liveHost() { return LIVE_HOSTS[liveIdx]; }
+function buildQS(params) {
+  const out = [];
+  Object.keys(params || {}).forEach(function (k) {
+    const v = params[k];
+    if (v === undefined || v === null || v === "") return;
+    out.push(encodeURIComponent(k) + "=" + encodeURIComponent(v));
+  });
+  return out.join("&");
+}
+
+async function fetchJSON(url, timeout) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(function () { ctrl.abort(); }, timeout || 7000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { throw new ApiError("応答がJSONではありません", res.status, "badResponse"); }
+    if (!res.ok || data.error) {
+      throw new ApiError((data && (data.message || data.error) && String(data.message || data.error)) || "HTTP " + res.status,
+        res.status, res.status === 429 ? "rateLimitExceeded" : "liveError");
+    }
+    return data;
+  } finally { clearTimeout(timer); }
+}
+
+/** Tries every known instance, remembering the first one that answers. */
+async function liveFetch(path, params, opt) {
+  opt = opt || {};
+  const qs = buildQS(params);
+  const ck = "L" + path + "?" + qs;
+  if (!opt.noCache) { const c = cacheGet(ck); if (c !== undefined) return c; }
+  let lastErr = null;
+  for (let a = 0; a < LIVE_HOSTS.length; a++) {
+    const i = (liveIdx + a) % LIVE_HOSTS.length;
+    try {
+      const data = await fetchJSON(LIVE_HOSTS[i] + path + (qs ? "?" + qs : ""), opt.timeout);
+      if (liveIdx !== i) { liveIdx = i; store.setRaw(KEYS.liveIdx, String(i)); }
+      if (liveDown) { liveDown = false; updateStatusBtn(); }
+      if (!opt.noCache) cacheSet(ck, data, opt.ttl);
+      return data;
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new ApiError("ライブAPIに接続できませんでした", 0, "network");
+}
+
+/* ---------- piped -> internal shape ---------- */
+function vidFromUrl(u) {
+  const s = String(u || "");
+  const m = /[?&]v=([\w-]{11})/.exec(s) || /\/(?:watch|shorts)\/([\w-]{11})/.exec(s) || /^\/?([\w-]{11})$/.exec(s);
+  return m ? m[1] : s.replace(/^\//, "");
+}
+function chIdFromUrl(u) {
+  const m = /\/channel\/(UC[\w-]{20,})/.exec(String(u || ""));
+  return m ? m[1] : "";
+}
+function unproxyUrl(u) {
+  const s = String(u || "");
+  if (!s || s.indexOf("?host=") < 0) return s;
+  const q = s.split("?")[1];
+  const host = (q.match(/host=([^&]+)/) || [])[1];
+  const path = s.split("?")[0].replace(/^https?:\/\/[^/]+\//, "");
+  if (!host || !path) return s;
+  return "https://" + decodeURIComponent(host) + "/" + path;
+}
+function pVideo(it) {
+  if (!it) return null;
+  const id = vidFromUrl(it.url || it.videoId);
+  if (!id || id.length !== 11) return null;
+  const raw = it.uploadedDate || it.uploaded || it.uploadDate;
+  let publishedAt = "", publishedText = "";
+  if (typeof it.uploaded === "number" && it.uploaded > 0) publishedAt = new Date(it.uploaded).toISOString();
+  else if (typeof raw === "string" && /\d{4}-\d{2}-\d{2}/.test(raw)) {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) publishedAt = d.toISOString();
+  } else if (typeof raw === "string") publishedText = raw;
+  if (!publishedText && typeof it.uploadedDate === "string" && /ago/i.test(it.uploadedDate)) publishedText = it.uploadedDate;
+  return {
+    id: id, title: it.title || "", description: it.shortDescription || it.description || "",
+    thumbnail: ytThumb(id, "hq"), thumbAlt: unproxyUrl(it.thumbnail),
+    channelId: chIdFromUrl(it.uploaderUrl) || it.uploaderId || "",
+    channelTitle: it.uploaderName || it.author || "",
+    channelThumbnail: unproxyUrl(it.uploaderAvatar || it.avatar),
+    publishedAt: publishedAt, publishedText: publishedText,
+    viewCount: typeof it.views === "number" && it.views >= 0 ? it.views : undefined,
+    likeCount: typeof it.likes === "number" && it.likes >= 0 ? it.likes : undefined,
+    /* Piped reports duration:-1 when the length is unknown (e.g. /trending) - not "live" */
+    durationSec: typeof it.duration === "number" ? Math.max(0, it.duration) : isoToSecs(it.duration),
+    isLive: !!it.isLive,
+  };
+}
+function pChannel(d) {
+  return {
+    id: (d && d.id) || chIdFromUrl(d && d.url) || "",
+    title: (d && (d.name || d.uploaderName || d.author)) || "",
+    description: (d && d.description) || "",
+    thumbnail: unproxyUrl(d && (d.avatarUrl || d.thumbnail || d.uploaderAvatar)),
+    thumbAlt: (d && (d.avatarUrl || d.thumbnail || d.uploaderAvatar)) || "",
+    banner: unproxyUrl(d && d.bannerUrl),
+    customUrl: (d && d.uploaderVerified) ? "" : "",
+    subscriberCount: d && typeof d.subscriberCount === "number" && d.subscriberCount >= 0 ? d.subscriberCount : undefined,
+    videoCount: undefined, publishedAt: "",
+  };
+}
+
+/* ---------- oEmbed (title / channel, always works without a key) ---------- */
+let _ta;
+function decodeEntities(s) {
+  if (!s || String(s).indexOf("&") < 0) return s;
+  if (!_ta) _ta = document.createElement("textarea");
+  _ta.innerHTML = String(s);
+  return _ta.value;
+}
+function stripTags(s) { return String(s || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""); }
+async function oembed(id) {
+  const ck = "OE:" + id;
+  const hit = cacheGet(ck);
+  if (hit) return hit;
+  const watch = encodeURIComponent("https://www.youtube.com/watch?v=" + id);
+  try {
+    const d = await fetchJSON("https://www.youtube.com/oembed?url=" + watch + "&format=json", 7000);
+    cacheSet(ck, d, 86400000);
+    return d;
+  } catch (e) {
+    try {
+      const d = await fetchJSON("https://noembed.com/embed?url=" + watch, 7000);
+      cacheSet(ck, d, 86400000);
+      return d;
+    } catch (e2) { return null; }
+  }
+}
+
+/* ---------- live endpoints ---------- */
+/** Fetches /streams for one video (used to fill in missing lengths on trending). */
+async function liveStreamMeta(id) {
+  try { return await liveFetch("/streams/" + id, {}, { ttl: 900000 }); } catch (e) { return null; }
+}
+/** Trending responses omit durations, so top them up a few at a time. */
+async function enrichDurations(list, limit) {
+  const targets = (list || []).filter(function (v) { return v && !v.durationSec && !v._enr; }).slice(0, limit || 12);
+  if (!targets.length) return false;
+  targets.forEach(function (v) { v._enr = true; });
+  const metas = await Promise.all(targets.map(function (v) { return liveStreamMeta(v.id); }));
+  let changed = false;
+  metas.forEach(function (d, i) {
+    if (!d) return;
+    const v = targets[i];
+    if (d.duration > 0) v.durationSec = Math.round(d.duration);
+    if (!v.publishedAt && typeof d.uploadDate === "string" && /\d{4}-\d{2}-\d{2}/.test(d.uploadDate)) {
+      const dd = new Date(d.uploadDate);
+      if (!isNaN(dd.getTime())) v.publishedAt = dd.toISOString();
+    }
+    if (v.viewCount === undefined && typeof d.views === "number" && d.views >= 0) v.viewCount = d.views;
+    if (v.likeCount === undefined && typeof d.likes === "number" && d.likes >= 0) v.likeCount = d.likes;
+    if (!v.channelThumbnail && d.uploaderAvatar) v.channelThumbnail = unproxyUrl(d.uploaderAvatar);
+    if (!v.channelId && d.uploaderUrl) v.channelId = chIdFromUrl(d.uploaderUrl);
+    if (!v.tags && d.keywords) v.tags = d.keywords.slice(0, 12);
+    changed = true;
+  });
+  return changed;
+}
+
+async function livePopular() {
+  const d = await liveFetch("/trending", { region: state.region }, { ttl: 600000 });
+  return { items: (Array.isArray(d) ? d : []).map(pVideo).filter(Boolean) };
+}
+async function liveSearch(o) {
+  o = o || {};
+  const d = await liveFetch("/search", { q: o.q, filter: "videos", nextpage: o.pageToken }, { ttl: 600000 });
+  return { items: (d.items || []).map(pVideo).filter(Boolean), nextPageToken: d.nextpage || undefined,
+    totalResults: undefined };
+}
+async function liveComments(id, token) {
+  const d = await liveFetch("/comments/" + id, token ? { nextpage: token } : {}, { ttl: 600000 });
+  if (d.disabled) throw new ApiError("comments disabled", 403, "commentsDisabled");
+  return {
+    items: (d.comments || []).map(function (c, i) {
+      return {
+        id: c.commentId || id + "-c" + i, authorName: c.author || "",
+        authorAvatar: unproxyUrl(c.thumbnail), text: decodeEntities(stripTags(c.commentText)),
+        likeCount: c.likeCount || 0, publishedAt: "", publishedText: c.commentedTime || "",
+        replyCount: c.replyCount || 0,
+      };
+    }),
+    nextPageToken: d.nextpage || undefined,
+    totalResults: typeof d.commentCount === "number" && d.commentCount >= 0 ? d.commentCount : undefined,
+  };
+}
+async function liveChannelPage(id, token) {
+  let d = await liveFetch("/channel/" + id, token ? { nextpage: token } : {}, { ttl: 600000 });
+  let items = (d.relatedStreams || []).map(pVideo).filter(Boolean);
+  /* some instances return an empty first page with a continuation token */
+  let next = d.nextpage || undefined;
+  if (!token && !items.length && next) {
+    try {
+      const d2 = await liveFetch("/channel/" + id, { nextpage: next }, { ttl: 600000 });
+      const more = (d2.relatedStreams || []).map(pVideo).filter(Boolean);
+      if (more.length) { items = more; next = d2.nextpage || undefined; }
+    } catch (e) { /* keep empty */ }
+  }
+  return { channel: pChannel(d), items: items, nextPageToken: next };
+}
+
+/** Video detail + channel + related. /streams is rate-limited on some instances, so
+ *  it falls back to oEmbed (title/channel) plus a title search (stats, related). */
+async function liveWatch(id) {
+  let video = null, channel = null, related = [];
+  try {
+    const d = await liveFetch("/streams/" + id, {}, { ttl: 600000 });
+    const dateRaw = d.uploadDate || "";
+    video = {
+      id: id, title: d.title || "", description: decodeEntities(stripTags(d.description)) || "",
+      thumbnail: ytThumb(id, "hq"), thumbAlt: "",
+      channelId: chIdFromUrl(d.uploaderUrl) || "",
+      channelTitle: d.uploader || "",
+      channelThumbnail: unproxyUrl(d.uploaderAvatar),
+      publishedAt: /\d{4}-\d{2}-\d{2}/.test(dateRaw) ? new Date(dateRaw).toISOString() : "",
+      publishedText: /ago$/i.test(dateRaw) ? dateRaw : "",
+      viewCount: typeof d.views === "number" && d.views >= 0 ? d.views : undefined,
+      likeCount: typeof d.likes === "number" && d.likes >= 0 ? d.likes : undefined,
+      durationSec: Math.max(0, d.duration || 0),
+      isLive: !!d.livestream, tags: (d.keywords || []).slice(0, 12),
+    };
+    channel = {
+      id: video.channelId, title: video.channelTitle, description: "",
+      thumbnail: video.channelThumbnail, banner: "",
+      subscriberCount: typeof d.uploaderSubscriberCount === "number" && d.uploaderSubscriberCount >= 0 ? d.uploaderSubscriberCount : undefined,
+    };
+    related = (d.relatedStreams || []).map(pVideo).filter(Boolean);
+  } catch (e) {
+    /* fallback: oEmbed + title search */
+    const info = await oembed(id);
+    let title = info && info.title ? info.title : "";
+    const chName = info && info.author_name ? info.author_name : "";
+    if (title) {
+      try {
+        const res = await liveSearch({ q: title });
+        const mine = res.items.filter(function (v) { return v.id === id; })[0];
+        if (mine) {
+          video = mine;
+          video.title = title || mine.title;
+          channel = { id: mine.channelId, title: chName || mine.channelTitle, description: "",
+            thumbnail: mine.channelThumbnail, banner: "", subscriberCount: undefined };
+        }
+        related = res.items.filter(function (v) { return v.id !== id; });
+      } catch (e2) { /* ignore */ }
+    }
+    if (!video) {
+      if (!title) return { video: null, channel: null, related: [] };
+      video = { id: id, title: title, description: "", thumbnail: ytThumb(id, "hq"), thumbAlt: "",
+        channelId: "", channelTitle: chName, channelThumbnail: "", publishedAt: "", publishedText: "",
+        viewCount: undefined, likeCount: undefined, durationSec: 0, isLive: false, tags: [] };
+      channel = { id: "", title: chName, description: "", thumbnail: "", banner: "", subscriberCount: undefined };
+      try {
+        const rel = await liveSearch({ q: chName || title });
+        related = rel.items.filter(function (v) { return v.id !== id; });
+      } catch (e3) { /* ignore */ }
+    }
+  }
+  return { video: video, channel: channel, related: related };
+}
+
+/** Home / trending feed. Trending returns a single page, so further pages use
+ *  rotating popular searches so infinite scrolling keeps working. */
+async function liveFeed(chip, token) {
+  const homeToken = typeof token === "string" && token.indexOf("h:") === 0;
+  const pt = homeToken ? undefined : token;
+  if (chip.query) return liveSearch({ q: chip.query, pageToken: pt });
+  if (chip.id) return liveSearch({ q: chip.title, pageToken: pt });
+  if (!token) {
+    const r = await livePopular();
+    return { items: r.items, nextPageToken: "h:0" };
+  }
+  const i = Number(String(token).slice(2)) || 0;
+  const r = await liveSearch({ q: HOME_MORE_QUERIES[i % HOME_MORE_QUERIES.length] });
+  return { items: r.items, nextPageToken: "h:" + (i + 1) };
+}
+async function officialFeed(chip, token) {
+  const homeToken = typeof token === "string" && token.indexOf("h:") === 0;
+  const pt = homeToken ? undefined : token;
+  if (chip.query) return realSearch({ q: chip.query, pageToken: pt });
+  if (chip.id) {
+    return realPopular({ category: chip.id, pageToken: pt }).catch(function () { return realSearch({ q: chip.title }); });
+  }
+  return realPopular({ pageToken: pt });
+}
+async function demoFeed(chip, token) {
+  const homeToken = typeof token === "string" && token.indexOf("h:") === 0;
+  const pt = homeToken ? undefined : token;
+  if (chip.query) return demoSearch({ q: chip.query, pageToken: pt });
+  if (chip.id) return demoPopular({ category: chip.id, pageToken: pt });
+  return demoPopular({ pageToken: pt });
+}
+
+/* ---------- real API ---------- */
+async function realVideosByIds(ids) {
+  const uniq = [];
+  ids.forEach(function (id) { if (id && uniq.indexOf(id) < 0) uniq.push(id); });
+  const out = [];
+  for (let i = 0; i < uniq.length; i += 50) {
+    const group = uniq.slice(i, i + 50);
+    const d = await ytRequest("videos", { part: "snippet,statistics,contentDetails", id: group.join(","), maxResults: 50 });
+    (d.items || []).forEach(function (r) { out.push(mapVideo(r)); });
+  }
+  const byId = {};
+  out.forEach(function (v) { byId[v.id] = v; });
+  return uniq.map(function (id) { return byId[id]; }).filter(Boolean);
+}
+async function realChannelsByIds(ids) {
+  const uniq = [];
+  ids.forEach(function (id) { if (id && uniq.indexOf(id) < 0) uniq.push(id); });
+  const out = [];
+  for (let i = 0; i < uniq.length; i += 50) {
+    const group = uniq.slice(i, i + 50);
+    const d = await ytRequest("channels", { part: "snippet,statistics,brandingSettings", id: group.join(","), maxResults: 50 }, { ttl: 3600000 });
+    (d.items || []).forEach(function (r) { out.push(mapChannel(r)); });
+  }
+  return out;
+}
+async function enrichChannels(videos) {
+  const ids = [];
+  videos.forEach(function (v) { if (v.channelId && ids.indexOf(v.channelId) < 0) ids.push(v.channelId); });
+  if (!ids.length) return videos;
+  try {
+    const chs = await realChannelsByIds(ids);
+    const m = {};
+    chs.forEach(function (c) { m[c.id] = c.thumbnail; });
+    videos.forEach(function (v) { v.channelThumbnail = m[v.channelId] || v.channelThumbnail; });
+  } catch (e) {}
+  return videos;
+}
+async function realPopular(o) {
+  o = o || {};
+  const d = await ytRequest("videos", { part: "snippet,statistics,contentDetails", chart: "mostPopular",
+    regionCode: state.region, videoCategoryId: o.category || undefined, maxResults: 24, pageToken: o.pageToken });
+  return { items: await enrichChannels((d.items || []).map(mapVideo)), nextPageToken: d.nextPageToken,
+    totalResults: d.pageInfo && d.pageInfo.totalResults };
+}
+async function realSearch(o) {
+  o = o || {};
+  const d = await ytRequest("search", { part: "snippet", q: o.q, type: "video", maxResults: 24,
+    order: o.order || "relevance", pageToken: o.pageToken, channelId: o.channelId, regionCode: state.region,
+    relevanceLanguage: state.region === "JP" ? "ja" : undefined, safeSearch: "moderate" });
+  const basic = (d.items || []).map(mapSearchItem).filter(function (v) { return v.id; });
+  let detailed = basic;
+  try {
+    const det = await realVideosByIds(basic.map(function (v) { return v.id; }));
+    const m = {};
+    det.forEach(function (x) { m[x.id] = x; });
+    detailed = basic.map(function (b) { return m[b.id] ? Object.assign({}, b, m[b.id]) : b; });
+  } catch (e) {}
+  return { items: await enrichChannels(detailed), nextPageToken: d.nextPageToken,
+    totalResults: d.pageInfo && d.pageInfo.totalResults };
+}
+async function realVideo(id) {
+  const list = await realVideosByIds([id]);
+  if (!list.length) return null;
+  return (await enrichChannels(list))[0];
+}
+async function realChannel(id) {
+  const list = await realChannelsByIds([id]);
+  return list.length ? list[0] : null;
+}
+async function realChannelVideos(channelId, pageToken) {
+  const uploads = channelId.indexOf("UC") === 0 ? "UU" + channelId.slice(2) : channelId;
+  let d;
+  try {
+    d = await ytRequest("playlistItems", { part: "contentDetails", playlistId: uploads, maxResults: 24, pageToken: pageToken });
+  } catch (e) {
+    if (e.status === 404) return { items: [] };
+    throw e;
+  }
+  const ids = (d.items || []).map(function (i) { return i.contentDetails.videoId; });
+  return { items: await realVideosByIds(ids), nextPageToken: d.nextPageToken,
+    totalResults: d.pageInfo && d.pageInfo.totalResults };
+}
+async function realComments(videoId, pageToken) {
+  const d = await ytRequest("commentThreads", { part: "snippet", videoId: videoId, maxResults: 20,
+    order: "relevance", textFormat: "plainText", pageToken: pageToken });
+  return { items: (d.items || []).map(mapComment), nextPageToken: d.nextPageToken,
+    totalResults: d.pageInfo && d.pageInfo.totalResults };
+}
+const NOISE = /\b(official|music|video|mv|m\/v|lyric|lyrics|audio|hd|4k|remaster(?:ed)?|ft\.?|feat\.?|full|ver\.?|edit|youtube|clip|short film|trailer)\b/gi;
+function buildRelatedQuery(v) {
+  let q = v.title.replace(/[【】\[\]()（）「」『』｢｣〔〕《》〈〉|｜/／\-–—:：#]/g, " ")
+    .replace(NOISE, " ").replace(/\s+/g, " ").trim();
+  if (q.length > 40) q = q.slice(0, 40);
+  return q || v.channelTitle;
+}
+async function realRelated(v) {
+  try {
+    const res = await realSearch({ q: buildRelatedQuery(v), maxResults: 20 });
+    const items = res.items.filter(function (x) { return x.id !== v.id; });
+    if (items.length) return items;
+  } catch (e) { if (e && e.reason === "noKey") throw e; }
+  const pop = await realPopular({ category: v.categoryId, maxResults: 20 }).catch(function () {
+    return realPopular({ maxResults: 20 });
+  });
+  return pop.items.filter(function (x) { return x.id !== v.id; });
+}
+
+/* ---------- demo API ---------- */
+const demoDelay = function () { return sleep(180 + Math.random() * 260); };
+function paginate(items, pageToken, size) {
+  size = size || 12;
+  const offset = pageToken ? Number(pageToken) || 0 : 0;
+  return { items: items.slice(offset, offset + size), nextPageToken: offset + size < items.length ? String(offset + size) : undefined,
+    totalResults: items.length };
+}
+function seededOrder(items, seed) {
+  return items.map(function (item, i) { return { item: item, k: hashStr(seed + ":" + i) }; })
+    .sort(function (a, b) { return a.k - b.k; }).map(function (x) { return x.item; });
+}
+async function demoPopular(o) {
+  o = o || {};
+  await demoDelay();
+  let list = VIDEOS;
+  if (o.category) list = VIDEOS.filter(function (v) { return v.categoryId === o.category; });
+  return paginate(seededOrder(list, "popular:" + (o.category || "all")), o.pageToken);
+}
+function scoreVideo(v, terms) {
+  const title = v.title.toLowerCase(), ch = v.channelTitle.toLowerCase(),
+    tags = (v.tags || []).join(" ").toLowerCase(), desc = v.description.toLowerCase();
+  let s = 0;
+  terms.forEach(function (t) {
+    if (title.indexOf(t) >= 0) s += 10;
+    if (ch.indexOf(t) >= 0) s += 6;
+    if (tags.indexOf(t) >= 0) s += 4;
+    if (desc.indexOf(t) >= 0) s += 1;
+  });
+  return s;
+}
+async function demoSearch(o) {
+  o = o || {};
+  await demoDelay();
+  const terms = String(o.q || "").toLowerCase().split(/[\s　]+/).filter(Boolean);
+  let pool = VIDEOS;
+  if (o.channelId) pool = pool.filter(function (v) { return v.channelId === o.channelId; });
+  const scored = pool.map(function (v) { return { v: v, s: terms.length ? scoreVideo(v, terms) : 1 }; })
+    .filter(function (x) { return x.s > 0; });
+  let items;
+  if (o.order === "date") items = scored.map(function (x) { return x.v; }).sort(function (a, b) { return b.publishedAt.localeCompare(a.publishedAt); });
+  else if (o.order === "viewCount") items = scored.map(function (x) { return x.v; }).sort(function (a, b) { return b.viewCount - a.viewCount; });
+  else if (o.order === "rating") items = scored.map(function (x) { return x.v; }).sort(function (a, b) { return b.likeCount - a.likeCount; });
+  else items = scored.sort(function (a, b) { return b.s - a.s; }).map(function (x) { return x.v; });
+  if (items.length < 8 && !o.channelId) {
+    const rest = seededOrder(VIDEOS.filter(function (v) { return items.indexOf(v) < 0; }), "search:" + o.q);
+    items = items.concat(rest);
+  }
+  return paginate(items, o.pageToken);
+}
+async function demoVideo(id) {
+  await demoDelay(120);
+  const f = VIDEOS.filter(function (v) { return v.id === id; });
+  return f.length ? f[0] : null;
+}
+async function demoVideosByIds(ids) {
+  await demoDelay(120);
+  return ids.map(function (id) {
+    const f = VIDEOS.filter(function (v) { return v.id === id; });
+    return f.length ? f[0] : null;
+  }).filter(Boolean);
+}
+async function demoChannel(id) {
+  await demoDelay(120);
+  return CH_BY_ID[id] || null;
+}
+async function demoChannelVideos(channelId, pageToken) {
+  await demoDelay();
+  const items = VIDEOS.filter(function (v) { return v.channelId === channelId; })
+    .sort(function (a, b) { return b.publishedAt.localeCompare(a.publishedAt); });
+  return paginate(items, pageToken);
+}
+async function demoComments(videoId, pageToken) {
+  await demoDelay();
+  const v = VIDEOS.filter(function (x) { return x.id === videoId; })[0];
+  if (v && v.commentCount === 0) throw new ApiError("comments disabled", 403, "commentsDisabled");
+  const base = hashStr(videoId);
+  const count = 18 + (base % 10);
+  const now = Date.now();
+  const list = [];
+  for (let i = 0; i < count; i++) {
+    const h = hashStr(videoId + ":" + i);
+    const tpl = CMT_TEXTS[(h + i) % CMT_TEXTS.length];
+    const author = CMT_AUTHORS[(h >> 3) % CMT_AUTHORS.length];
+    const daysAgo = (h % 700) + 1;
+    const year = new Date(now - daysAgo * 86400000).getFullYear();
+    list.push({
+      id: videoId + "-c" + i, authorName: author, authorAvatar: "",
+      text: tpl.replace("{year}", String(year)).replace("{n}", String((h % 90) + 10))
+        .replace("{ts}", (h % 4) + ":" + String((h >> 2) % 60).padStart(2, "0")),
+      likeCount: Math.floor(((h % 1000) * (h % 7)) / (i + 1)),
+      publishedAt: new Date(now - daysAgo * 86400000 - (h % 86400000)).toISOString(),
+      replyCount: h % 5 === 0 ? (h % 20) + 1 : 0,
+    });
+  }
+  list.sort(function (a, b) { return b.likeCount - a.likeCount; });
+  return paginate(list, pageToken);
+}
+async function demoRelated(v) {
+  await demoDelay();
+  const others = VIDEOS.filter(function (x) { return x.id !== v.id; });
+  const sameCh = others.filter(function (x) { return x.channelId === v.channelId; });
+  const sameCat = others.filter(function (x) { return x.channelId !== v.channelId && x.categoryId === v.categoryId; });
+  const rest = others.filter(function (x) { return x.channelId !== v.channelId && x.categoryId !== v.categoryId; });
+  return sameCh.concat(seededOrder(sameCat, "rel:" + v.id), seededOrder(rest, "rel2:" + v.id)).slice(0, 20);
+}
+
+/* ---------- dispatcher (official API > live keyless API > demo data) ---------- */
+function withLiveFallback(promise, demoFn, args) {
+  return promise.catch(async function (err) {
+    if (err && err.reason === "commentsDisabled") throw err;
+    if (!liveDown) {
+      liveDown = true;
+      updateStatusBtn();
+      toast("ライブAPIに接続できません。デモデータで表示しています");
+    }
+    return demoFn.apply(null, args);
+  });
+}
+const api = {
+  feed: function (chip, token) {
+    const m = mode();
+    if (m === "live") return withLiveFallback(liveFeed(chip, token), demoFeed, [chip, token]);
+    if (m === "official") return officialFeed(chip, token);
+    return demoFeed(chip, token);
+  },
+  popular: function (o) {
+    const m = mode();
+    if (m === "live") return withLiveFallback(livePopular(), demoPopular, [o]);
+    if (m === "official") return realPopular(o);
+    return demoPopular(o);
+  },
+  search: function (o) {
+    const m = mode();
+    if (m === "live") return withLiveFallback(liveSearch(o), demoSearch, [o]);
+    if (m === "official") return realSearch(o);
+    return demoSearch(o);
+  },
+  /** watch page needs video + channel + related together */
+  watch: async function (id) {
+    const m = mode();
+    if (m === "official") {
+      const video = await realVideo(id);
+      if (!video) return liveWatch(id);
+      const channel = await realChannel(video.channelId).catch(function () { return null; });
+      const related = await realRelated(video).catch(function () { return []; });
+      return { video: video, channel: channel, related: related };
+    }
+    if (m === "demo") {
+      const video = await demoVideo(id);
+      if (!video) return { video: null, channel: null, related: [] };
+      return { video: video, channel: await demoChannel(video.channelId).catch(function () { return null; }),
+        related: await demoRelated(video) };
+    }
+    const res = await liveWatch(id);
+    if (!res.video) {
+      const video = await demoVideo(id);
+      if (video) return { video: video, channel: CH_BY_ID[video.channelId] || null, related: await demoRelated(video) };
+    }
+    return res;
+  },
+  video: function (id) {
+    const m = mode();
+    if (m === "official") return realVideo(id);
+    if (m === "demo") return demoVideo(id);
+    return liveWatch(id).then(function (r) { return r.video; });
+  },
+  channelPage: function (id, token) {
+    const m = mode();
+    if (m === "live") return withLiveFallback(liveChannelPage(id, token), demoChannelPage, [id, token]);
+    if (m === "official") return officialChannelPage(id, token);
+    return demoChannelPage(id, token);
+  },
+  comments: function (id, token) {
+    const m = mode();
+    if (m === "official") return realComments(id, token);
+    if (m === "demo") return demoComments(id, token);
+    return liveComments(id, token).catch(async function (err) {
+      if (err && err.reason === "commentsDisabled") {
+        const d = await demoComments(id, token).catch(function () { return null; });
+        if (d) throw err;
+      }
+      return demoComments(id, token);
+    });
+  },
+  testKey: async function (key) {
+    try {
+      await ytRequest("videos", { part: "id", chart: "mostPopular", maxResults: 1, regionCode: state.region },
+        { key: key, noCache: true });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e };
+    }
+  },
+};
+
+/* ---------- channel page helpers (channel + first videos in one call) ---------- */
+async function officialChannelPage(id, token) {
+  const channel = await realChannel(id);
+  const videos = await realChannelVideos(id, token);
+  return { channel: channel, items: videos.items, nextPageToken: videos.nextPageToken };
+}
+async function demoChannelPage(id, token) {
+  const channel = await demoChannel(id);
+  const videos = await demoChannelVideos(id, token);
+  return { channel: channel, items: videos.items, nextPageToken: videos.nextPageToken };
+}
+
+const HOME_CHIPS = [
+  { id: "", title: "すべて" }, { id: "10", title: "音楽" }, { id: "20", title: "ゲーム" },
+  { id: "24", title: "エンターテイメント" }, { id: "25", title: "ニュース" }, { id: "17", title: "スポーツ" },
+  { id: "28", title: "科学と技術" }, { id: "27", title: "教育" }, { id: "1", title: "映画とアニメ" },
+  { id: "23", title: "コメディ" }, { id: "15", title: "ペットと動物" }, { id: "26", title: "ハウツーとスタイル" },
+  { id: "19", title: "旅行" }, { id: "q:lofi", title: "Lo-Fi", query: "lofi 作業用BGM" },
+  { id: "q:cook", title: "料理", query: "簡単レシピ 料理" }, { id: "q:code", title: "プログラミング", query: "プログラミング 入門" },
+  { id: "q:vlog", title: "VLOG", query: "vlog 日常" }, { id: "q:nature", title: "自然", query: "自然 4K 絶景" },
+];
+
+/* =========================================================================
+   UI PRIMITIVES
+   ========================================================================= */
+function toast(msg, actionLabel, actionFn) {
+  const root = $("#toasts");
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.innerHTML = '<span>' + esc(msg) + "</span>" +
+    (actionLabel ? '<button type="button" data-toast-action>' + esc(actionLabel) + "</button>" : "") +
+    '<button type="button" class="x" data-toast-close aria-label="閉じる">' + icon("x", 16) + "</button>";
+  root.appendChild(el);
+  const close = function () { if (el.parentNode) el.parentNode.removeChild(el); };
+  el.addEventListener("click", function (e) {
+    const t = e.target.closest("[data-toast-action],[data-toast-close]");
+    if (!t) return;
+    if (t.hasAttribute("data-toast-action") && actionFn) actionFn();
+    close();
+  });
+  setTimeout(close, 3500);
+}
+
+const AV_COLORS = ["#dc2626","#db2777","#9333ea","#4f46e5","#2563ba","#0e7490","#0d9488","#15803d","#4d7c0f","#b45309","#c2410c","#be123c"];
+function avatarHTML(name, src, size) {
+  const s = size || 36;
+  const style = "width:" + s + "px;height:" + s + "px";
+  if (src) {
+    return '<img class="avatar" style="' + style + '" src="' + esc(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" />';
+  }
+  const initial = (name || "?").trim().charAt(0).toUpperCase();
+  const color = AV_COLORS[hashStr(name || "?") % AV_COLORS.length];
+  return '<div class="avatar-letter" style="' + style + ";background:" + color + ";font-size:" +
+    Math.max(11, Math.round(s * 0.42)) + 'px">' + esc(initial) + "</div>";
+}
+
+/* graceful thumbnail fallback */
+document.addEventListener("error", function (e) {
+  const t = e.target;
+  if (!t || t.tagName !== "IMG" || t.dataset.fallback) return;
+  t.dataset.fallback = "1";
+  t.src =
+    "data:image/svg+xml;charset=utf-8," +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2b2b2b"/><stop offset="1" stop-color="#1a1a1a"/></linearGradient></defs><rect width="480" height="270" fill="url(#g)"/><path d="M225 105l75 30-75 30z" fill="#555"/></svg>',
+    );
+}, true);
+
+function thumbHTML(v, small) {
+  const parts = [
+    '<a href="#/watch?v=' + encodeURIComponent(v.id) + '" aria-label="' + esc(v.title) + '">',
+    '<img class="thumb' + (small ? " sm" : "") + '" src="' + esc(v.thumbnail || ytThumb(v.id)) + '"' +
+      (v.thumbAlt && v.thumbAlt !== v.thumbnail ? ' data-alt="' + esc(v.thumbAlt) + '"' : "") +
+      ' alt="" loading="lazy" referrerpolicy="no-referrer" />',
+  ];
+  if (v.isLive) parts.push('<span class="badge live">ライブ</span>');
+  else if (v.durationSec > 0) parts.push('<span class="badge">' + esc(fmtDuration(v.durationSec)) + "</span>");
+  parts.push("</a>");
+  const laterOn = state.later.some(function (x) { return x.id === v.id; });
+  parts.push(
+    '<button class="save-pill' + (laterOn ? " on" : "") + '" data-act="later" data-id="' + esc(v.id) + '" title="' +
+      (laterOn ? "後で見るから削除" : "後で見る") + '" aria-label="後で見る">' +
+      icon(laterOn ? "check" : "clock", 16) + "</button>",
+  );
+  return '<div class="thumb-wrap">' + parts.join("") + "</div>";
+}
+function metaHTML(v) {
+  const a = [];
+  if (v.viewCount !== undefined && v.viewCount !== null) a.push(fmtViews(v.viewCount));
+  a.push(whenText(v));
+  return a.join(" • ");
+}
+
+function gridCardHTML(v) {
+  return (
+    '<article class="card" data-video="' + esc(v.id) + '">' +
+      thumbHTML(v, false) +
+      '<div class="card-body">' +
+        '<a href="#/channel/' + encodeURIComponent(v.channelId) + '" style="flex:none">' +
+          avatarHTML(v.channelTitle, v.channelThumbnail, 36) + "</a>" +
+        '<div class="grow">' +
+          '<a href="#/watch?v=' + encodeURIComponent(v.id) + '"><div class="card-title">' + esc(v.title) + "</div></a>" +
+          '<a class="card-ch truncate" style="display:block" href="#/channel/' + encodeURIComponent(v.channelId) + '">' + esc(v.channelTitle) + "</a>" +
+          '<div class="card-meta">' + esc(metaHTML(v)) + "</div>" +
+        "</div>" +
+        '<button class="more-btn" data-act="menu" data-id="' + esc(v.id) + '" aria-label="その他の操作">' + icon("more", 20) + "</button>" +
+      "</div>" +
+    "</article>"
+  );
+}
+function listCardHTML(v) {
+  return (
+    '<article class="list-card" data-video="' + esc(v.id) + '">' +
+      '<div class="list-thumb">' + thumbHTML(v, false) + "</div>" +
+      '<div class="list-body">' +
+        '<div class="grow">' +
+          '<a href="#/watch?v=' + encodeURIComponent(v.id) + '"><div class="list-title">' + esc(v.title) + "</div></a>" +
+          '<div class="card-meta small">' + esc(metaHTML(v)) + "</div>" +
+          '<a class="list-ch" href="#/channel/' + encodeURIComponent(v.channelId) + '">' +
+            avatarHTML(v.channelTitle, v.channelThumbnail, 24) + "<span>" + esc(v.channelTitle) + "</span></a>" +
+          (v.description ? '<div class="list-desc">' + esc(v.description) + "</div>" : "") +
+        "</div>" +
+        '<button class="more-btn" data-act="menu" data-id="' + esc(v.id) + '" aria-label="その他の操作">' + icon("more", 20) + "</button>" +
+      "</div>" +
+    "</article>"
+  );
+}
+function compactCardHTML(v) {
+  return (
+    '<article class="compact" data-video="' + esc(v.id) + '">' +
+      thumbHTML(v, true) +
+      '<div class="grow" style="display:flex">' +
+        '<div class="grow">' +
+          '<a href="#/watch?v=' + encodeURIComponent(v.id) + '"><div class="t">' + esc(v.title) + "</div></a>" +
+          '<a class="card-ch small truncate" style="display:block;margin-top:4px" href="#/channel/' + encodeURIComponent(v.channelId) + '">' +
+            esc(v.channelTitle) + "</a>" +
+          '<div class="card-meta small">' + esc(metaHTML(v)) + "</div>" +
+        "</div>" +
+        '<button class="more-btn" data-act="menu" data-id="' + esc(v.id) + '" aria-label="その他の操作">' + icon("more", 20) + "</button>" +
+      "</div>" +
+    "</article>"
+  );
+}
+
+function skCardHTML() {
+  return '<div class="card"><div class="sk" style="aspect-ratio:16/9;border-radius:12px"></div>' +
+    '<div class="card-body"><div class="sk" style="width:36px;height:36px;border-radius:50%;flex:none"></div>' +
+    '<div class="grow" style="padding-top:4px"><div class="sk" style="height:14px;width:92%;margin-bottom:10px"></div>' +
+    '<div class="sk" style="height:14px;width:58%;margin-bottom:10px"></div><div class="sk" style="height:11px;width:40%"></div></div></div></div>';
+}
+function skListHTML() {
+  return '<div class="list-card"><div class="sk" style="aspect-ratio:16/9;width:100%;flex:none;border-radius:12px"></div>' +
+    '<div class="grow" style="padding-top:4px"><div class="sk" style="height:18px;width:82%;margin-bottom:12px"></div>' +
+    '<div class="sk" style="height:11px;width:30%;margin-bottom:16px"></div><div class="sk" style="height:11px;width:70%"></div></div></div>';
+}
+function skCompactHTML() {
+  return '<div class="compact"><div class="sk" style="width:168px;aspect-ratio:16/9;flex:none;border-radius:8px"></div>' +
+    '<div class="grow" style="padding-top:2px"><div class="sk" style="height:12px;width:92%;margin-bottom:8px"></div>' +
+    '<div class="sk" style="height:12px;width:64%;margin-bottom:8px"></div><div class="sk" style="height:10px;width:46%"></div></div></div>';
+}
+function skeletonHTML(kind, n) {
+  const fn = kind === "list" ? skListHTML : kind === "compact" ? skCompactHTML : skCardHTML;
+  let out = "";
+  for (let i = 0; i < (n || 12); i++) out += fn();
+  return out;
+}
+function spinnerHTML() { return '<div class="spinner"><i></i></div>'; }
+function emptyHTML(iconName, title, desc, actionHTML) {
+  return '<div class="state">' + icon(iconName, 48) + "<h3>" + esc(title) + "</h3>" +
+    (desc ? "<p>" + esc(desc) + "</p>" : "") + (actionHTML ? '<div class="actions">' + actionHTML + "</div>" : "") + "</div>";
+}
+function errorHTML(err, compact, retryAttr) {
+  const info = describeError(err);
+  const keyReasons = ["noKey", "keyInvalid", "quotaExceeded", "accessNotConfigured", "ipRefererBlocked", "refererBlocked"];
+  const needsKey = err && keyReasons.indexOf(err.reason) >= 0;
+  return '<div class="state' + (compact ? " compact" : "") + '">' + icon("alert", compact ? 32 : 48) +
+    "<h3>" + esc(info.title) + "</h3>" +
+    (info.detail ? "<p>" + esc(info.detail) + "</p>" : "") +
+    (info.hint ? "<p>" + esc(info.hint) + "</p>" : "") +
+    '<div class="actions">' +
+      (retryAttr ? '<button class="btn btn-secondary" data-act="retry" data-target="' + retryAttr + '">' + icon("refresh", 16) + "再試行</button>" : "") +
+      (needsKey ? '<button class="btn btn-primary" data-act="settings">' + icon("key", 16) + "APIキーを設定</button>" : "") +
+    "</div></div>";
+}
+
+/* ---------- card menu ---------- */
+function closeMenu() {
+  const root = $("#menu-root");
+  root.innerHTML = "";
+  $$(".more-btn.open").forEach(function (b) { b.classList.remove("open"); });
+}
+function openMenu(anchor, video) {
+  closeMenu();
+  const inWL = state.later.some(function (x) { return x.id === video.id; });
+  const liked = state.liked.some(function (x) { return x.id === video.id; });
+  const root = $("#menu-root");
+  const box = document.createElement("div");
+  box.className = "menu";
+  box.innerHTML =
+    '<button data-act="later" data-id="' + esc(video.id) + '">' + icon(inWL ? "check" : "clock", 20) +
+      (inWL ? "後で見るから削除" : "後で見るに保存") + "</button>" +
+    '<button data-act="like" data-id="' + esc(video.id) + '">' + icon(liked ? "check" : "thumbsUp", 20) +
+      (liked ? "高評価を取り消す" : "高評価") + "</button>" +
+    '<button data-act="copy" data-id="' + esc(video.id) + '">' + icon("link", 20) + "リンクをコピー</button>" +
+    '<button data-act="openyt" data-id="' + esc(video.id) + '">' + icon("ext", 20) + "YouTubeで開く</button>";
+  root.appendChild(box);
+  const r = anchor.getBoundingClientRect();
+  const w = 240;
+  let left = Math.min(r.right - w, window.innerWidth - w - 8);
+  left = Math.max(8, left);
+  let top = r.bottom + 4;
+  if (top + box.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - box.offsetHeight - 4);
+  box.style.position = "fixed";
+  box.style.left = left + "px";
+  box.style.top = top + "px";
+  anchor.classList.add("open");
+}
+document.addEventListener("click", function (e) {
+  if (!e.target.closest(".menu") && !e.target.closest('[data-act="menu"]')) closeMenu();
+});
+window.addEventListener("scroll", function () { closeMenu(); }, true);
+
+/* ---------- video lookups for menu actions ---------- */
+const V_INDEX = {};
+VIDEOS.forEach(function (v) { V_INDEX[v.id] = v; });
+function findVideo(id) {
+  if (V_INDEX[id]) return V_INDEX[id];
+  const pools = [state.hist, state.liked, state.later];
+  for (let i = 0; i < pools.length; i++) {
+    const f = pools[i].filter(function (x) { return x.id === id; });
+    if (f.length) return f[0];
+  }
+  for (const key in pageData) {
+    const arr = pageData[key];
+    if (!Array.isArray(arr)) continue;
+    const f = arr.filter(function (x) { return x.id === id; });
+    if (f.length) return f[0];
+  }
+  return { id: id, title: "", channelId: "", channelTitle: "", thumbnail: ytThumb(id), thumbAlt: "",
+    publishedAt: "", publishedText: "", durationSec: 0, tags: [] };
+}
+
+/* ---------- paged loading ---------- */
+function Pager(fetcher) {
+  this.fetcher = fetcher;
+  this.reset();
+}
+Pager.prototype.reset = function () {
+  this.items = [];
+  this.token = undefined;
+  this.hasMore = false;
+  this.loading = false;
+  this.loadingMore = false;
+  this.error = null;
+  this.total = undefined;
+};
+Pager.prototype.add = function (list) {
+  const self = this;
+  (list || []).forEach(function (v) {
+    if (!v || !v.id) return;
+    if (self.items.some(function (x) { return x.id === v.id; })) return;
+    self.items.push(v);
+    if (!V_INDEX[v.id]) V_INDEX[v.id] = v;
+  });
+};
+Pager.prototype.load = async function () {
+  this.loading = true;
+  this.error = null;
+  try {
+    const r = await this.fetcher(this.token);
+    this.add(r.items);
+    this.token = r.nextPageToken;
+    this.hasMore = !!r.nextPageToken;
+    this.total = r.totalResults;
+  } catch (e) {
+    this.error = e;
+  }
+  this.loading = false;
+  return this;
+};
+Pager.prototype.loadMore = async function () {
+  if (this.loading || this.loadingMore || !this.hasMore) return this;
+  this.loadingMore = true;
+  try {
+    const r = await this.fetcher(this.token);
+    this.add(r.items);
+    this.token = r.nextPageToken;
+    this.hasMore = !!r.nextPageToken;
+    this.total = r.totalResults;
+  } catch (e) {
+    this.error = e;
+  }
+  this.loadingMore = false;
+  return this;
+};
+
+const pageData = {};
+
+function attachInfinite(container, pager, renderList) {
+  if (container._io) container._io.disconnect();
+  const io = new IntersectionObserver(function (entries) {
+    if (!entries[0] || !entries[0].isIntersecting) return;
+    if (!pager.hasMore || pager.loading || pager.loadingMore) return;
+    pager.loadMore().then(function () { renderList(); });
+  }, { rootMargin: "600px 0px" });
+  io.observe(container);
+  container._io = io;
+}
+
+/* =========================================================================
+   PAGE PARTS
+   ========================================================================= */
+function chipbarHTML(chips, activeId) {
+  return (
+    '<div class="chipbar"><div class="edge l"><button class="icon-btn" data-act="chipscroll" data-dir="-1" aria-label="左へ">' + icon("chevL") + "</button></div>" +
+    '<div class="chipbar-scroll" id="chipbar-scroll">' +
+      chips.map(function (c) {
+        return '<button class="chip' + (c.id === activeId ? " active" : "") + '" data-act="chip" data-id="' + esc(c.id) + '">' + esc(c.title) + "</button>";
+      }).join("") +
+    "</div>" +
+    '<div class="edge r"><button class="icon-btn" data-act="chipscroll" data-dir="1" aria-label="右へ">' + icon("chevR") + "</button></div></div>"
+  );
+}
+function wireChipbar() {
+  const sc = $("#chipbar-scroll");
+  if (!sc) return;
+  const update = function () {
+    const l = $('.chipbar .edge.l'), r = $('.chipbar .edge.r');
+    if (!l || !r) return;
+    l.classList.toggle("show", sc.scrollLeft > 4);
+    r.classList.toggle("show", sc.scrollLeft + sc.clientWidth < sc.scrollWidth - 4);
+  };
+  sc.addEventListener("scroll", update, { passive: true });
+  setTimeout(update, 60);
+  window.addEventListener("resize", update, { once: true });
+}
+
+function demoBannerHTML() {
+  return (
+    '<div class="demo-banner" id="demo-banner">' +
+      '<div class="ic">' + icon("sparkles", 24) + "</div>" +
+      '<div class="grow"><h2>デモモードで表示しています</h2><p>いま表示しているのはサンプルデータです（動画の再生は実際にできます）。YouTube Data API のキーを設定すると、急上昇・検索・コメント・チャンネル情報がすべて本物のデータで動作します。</p></div>' +
+      '<button class="btn btn-primary" data-act="settings">' + icon("key", 16) + "APIキーを設定</button>" +
+      '<button class="icon-btn close" data-act="dismiss-demo" aria-label="閉じる">' + icon("x", 18) + "</button>" +
+    "</div>"
+  );
+}
+
+function liveBannerHTML() {
+  return (
+    '<div class="live-banner">' +
+      '<div class="ic">' + icon("sparkles", 22) + "</div>" +
+      '<div class="grow"><h2>リアルタイムの YouTube データを表示中</h2>' +
+      "<p>APIキー不要の公開APIから取得しています（接続先: " + esc(liveHost().replace(/^https?:\/\//, "")) +
+      "）。検索・コメント・チャンネルも本物のデータです。安定運用や高精度な場合は公式 API キーの設定もできます。</p></div>" +
+      '<button class="btn btn-secondary" data-act="settings">設定</button>' +
+      '<button class="icon-btn close" data-act="dismiss-live" aria-label="閉じる">' + icon("x", 18) + "</button>" +
+    "</div>"
+  );
+}
+
+function renderFeedList(pager, container, kind) {
+  if (pager.error && !pager.items.length) {
+    container.innerHTML = errorHTML(pager.error, false, "feed");
+    return;
+  }
+  if (!pager.loading && !pager.items.length) {
+    container.innerHTML = emptyHTML("search", "動画が見つかりませんでした", "別のキーワードやカテゴリを試してください。");
+    return;
+  }
+  const fn = kind === "list" ? listCardHTML : gridCardHTML;
+  let html = "";
+  if (kind === "list") html = '<div class="feed-list" style="display:flex;flex-direction:column;gap:20px">';
+  else html = '<div class="grid">';
+  pager.items.forEach(function (v) { html += fn(v); });
+  if (pager.loading) html += skeletonHTML(kind === "list" ? "list" : "grid", kind === "list" ? 8 : 12);
+  html += "</div>";
+  if (pager.error && pager.items.length) html += errorHTML(pager.error, true, "feed-more");
+  if (pager.loadingMore) html += spinnerHTML();
+  container.innerHTML = html;
+}
+
+/* =========================================================================
+   PAGES
+   ========================================================================= */
+function pageHome() {
+  const chipId = currentRoute.query.c || "";
+  const chip = HOME_CHIPS.filter(function (c) { return c.id === chipId; })[0] || HOME_CHIPS[0];
+  const main = $("#main");
+  main.innerHTML =
+    chipbarHTML(HOME_CHIPS, chip.id) +
+    '<div class="page">' +
+      (mode() === "demo"
+        ? (sessionStorage.getItem("mytube.demoHidden") === "1" ? "" : demoBannerHTML())
+        : sessionStorage.getItem("mytube.liveHidden") === "1" ? "" : liveBannerHTML()) +
+      '<div id="feed"></div><div id="sentinel" style="height:1px"></div></div>';
+  wireChipbar();
+  const container = $("#feed");
+  const pager = new Pager(function (pt) { return api.feed(chip, pt); });
+  pageData.feed = pager;
+  let enriching = false;
+  const render = function (fromEnrich) {
+    renderFeedList(pager, container, "grid");
+    if (!fromEnrich && !enriching) {
+      enriching = true;
+      enrichDurations(pager.items, 12).then(function (changed) {
+        enriching = false;
+        if (changed && $("#main").contains(container)) render(true);
+      });
+    }
+  };
+  render();
+  pager.load().then(function () {
+    render();
+    attachInfinite($("#sentinel"), pager, render);
+  });
+  document.title = "MyTube";
+}
+
+function pageResults() {
+  const q = currentRoute.query.search_query || "";
+  const order = currentRoute.query.order || "relevance";
+  const orders = [["relevance", "関連度順"], ["date", "アップロード日"], ["viewCount", "視聴回数"], ["rating", "評価"]];
+  const main = $("#main");
+  main.innerHTML =
+    '<div class="page">' +
+      '<div class="search-bar">' +
+        '<span class="row muted" style="gap:8px;font-size:14px">' + icon("sliders", 18) + "並べ替え</span>" +
+        orders.map(function (o) {
+          return '<button class="chip' + (order === o[0] ? " active" : "") + '" data-act="order" data-order="' + o[0] + '">' + o[1] + "</button>";
+        }).join("") +
+        '<span class="grow"></span><span class="small muted" id="result-count"></span>' +
+      "</div>" +
+      '<div id="feed"></div><div id="sentinel" style="height:1px"></div></div>';
+  const container = $("#feed");
+  if (!q) {
+    container.innerHTML = emptyHTML("search", "検索キーワードを入力してください");
+    document.title = "検索 - MyTube";
+    return;
+  }
+  const pager = new Pager(function (pt) { return api.search({ q: q, order: order, pageToken: pt }); });
+  pageData.feed = pager;
+  const render = function () {
+    renderFeedList(pager, container, "list");
+    const c = $("#result-count");
+    if (c) c.textContent = pager.total !== undefined && pager.items.length
+      ? "約 " + pager.total.toLocaleString("ja-JP") + " 件" + (mode() === "demo" ? "（デモデータ）" : "") : "";
+  };
+  render();
+  pager.load().then(function () {
+    if (!pager.error && !pager.items.length) {
+      container.innerHTML = emptyHTML("search", "「" + q + "」に一致する動画は見つかりませんでした", "キーワードを変えるか、スペルを確認してみてください。");
+    } else render();
+    attachInfinite($("#sentinel"), pager, render);
+  });
+  document.title = q + " - 検索結果 - MyTube";
+}
+
+function pageTrending() {
+  const tabs = [["", "最新"], ["10", "音楽"], ["20", "ゲーム"], ["1", "映画"]];
+  const tab = currentRoute.query.c || "";
+  const main = $("#main");
+  main.innerHTML =
+    '<div class="page">' +
+      '<div class="page-head"><div class="badge-ic" style="background:linear-gradient(135deg,#ef4444,#f97316);color:#fff">' +
+        icon("flame", 26) + "</div>" +
+        '<div><h1>急上昇</h1><div class="small muted">地域: ' + esc(state.region) + "</div></div></div>" +
+      '<div class="sub-tabs">' +
+        tabs.map(function (t) {
+          return '<button class="' + (t[0] === tab ? "active" : "") + '" data-act="trendtab" data-id="' + t[0] + '">' + t[1] + "</button>";
+        }).join("") +
+      "</div>" +
+      '<div id="feed"></div><div id="sentinel" style="height:1px"></div></div>';
+  const container = $("#feed");
+  const tabChip = { id: tab, title: (tabs.filter(function (t) { return t[0] === tab; })[0] || ["", ""])[1], query: "" };
+  const pager = new Pager(function (pt) { return api.feed(tabChip, pt); });
+  pageData.feed = pager;
+  let enriching = false;
+  const render = function (fromEnrich) {
+    if (pager.error && !pager.items.length) { container.innerHTML = errorHTML(pager.error, false, "feed"); return; }
+    if (!pager.loading && !pager.items.length) { container.innerHTML = emptyHTML("flame", "急上昇動画が見つかりませんでした"); return; }
+    let html = '<div class="feed-list" style="display:flex;flex-direction:column;gap:24px">';
+    pager.items.forEach(function (v, i) {
+      html += '<div style="display:flex;gap:16px"><div class="rank">' + (i + 1) + "</div>" +
+        '<div class="grow">' + listCardHTML(v) + "</div></div>";
+    });
+    if (pager.loading) html += skeletonHTML("list", 8);
+    html += "</div>";
+    if (pager.error) html += errorHTML(pager.error, true, "feed-more");
+    if (pager.loadingMore) html += spinnerHTML();
+    container.innerHTML = html;
+    if (!fromEnrich && !enriching) {
+      enriching = true;
+      enrichDurations(pager.items, 12).then(function (changed) {
+        enriching = false;
+        if (changed && $("#main").contains(container)) render(true);
+      });
+    }
+  };
+  render();
+  pager.load().then(function () {
+    render();
+    attachInfinite($("#sentinel"), pager, render);
+  });
+  document.title = "急上昇 - MyTube";
+}
+
+function subscribeHTML(ch, large) {
+  const on = state.subs.some(function (x) { return x.id === ch.id; });
+  return (
+    '<button class="btn ' + (on ? "btn-secondary" : "btn-primary") + (large ? " btn-lg" : "") + '" data-act="sub" data-ch="' +
+      esc(ch.id) + '">' + icon(on ? "bellRing" : "bell", 16) + (on ? "登録済み" : "チャンネル登録") + "</button>"
+  );
+}
+
+function descHTML(v) {
+  const tags = (v.tags || []).slice(0, 3);
+  return (
+    '<div class="desc" id="desc-box" data-act="desc-open">' +
+      '<div class="row wrap" style="gap:8px;flex-wrap:wrap;font-weight:500">' +
+        (v.viewCount !== undefined ? "<span>" + esc(fmtViews(v.viewCount)) + "</span>" : "") +
+        "<span>" + esc(dateText(v)) + "</span>" +
+        tags.map(function (t) {
+          return '<a class="tag" href="#/results?search_query=' + encodeURIComponent(t) + '">#' + esc(t.replace(/\s+/g, "")) + "</a>";
+        }).join("") +
+      "</div>" +
+      '<div class="body line3" id="desc-body">' +
+        (v.description ? linkify(v.description) : '<span class="muted">説明はありません。</span>') +
+      "</div>" +
+      '<span class="more" id="desc-more">...もっと見る</span>' +
+    "</div>"
+  );
+}
+const YT_URL_RE = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/watch\?(?:[^\s]*&)?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/;
+function linkify(text) {
+  const parts = String(text).split(/(https?:\/\/[^\s<>"'）)]+|\s?#[^\s#]+)/g);
+  return parts.map(function (p) {
+    if (!p) return "";
+    if (/^https?:\/\//.test(p)) {
+      const m = p.match(YT_URL_RE);
+      if (m) return '<a href="#/watch?v=' + encodeURIComponent(m[1]) + '">' + esc(p) + "</a>";
+      return '<a href="' + esc(p) + '" target="_blank" rel="noreferrer">' + esc(p) + "</a>";
+    }
+    const tag = p.match(/^(\s?)(#[^\s#]+)$/);
+    if (tag) return esc(tag[1]) + '<a href="#/results?search_query=' + encodeURIComponent(tag[2]) + '">' + esc(tag[2]) + "</a>";
+    return esc(p);
+  }).join("");
+}
+
+function watchInfoHTML(v, ch) {
+  const liked = state.liked.some(function (x) { return x.id === v.id; });
+  const inWL = state.later.some(function (x) { return x.id === v.id; });
+  const likeCount = (v.likeCount || 0) + (liked ? 1 : 0);
+  const sub = ch && ch.id === v.channelId ? ch : { id: v.channelId, title: v.channelTitle, thumbnail: v.channelThumbnail };
+  return (
+    '<h1>' + esc(v.title) + "</h1>" +
+    '<div class="watch-row">' +
+      '<div class="ch-row">' +
+        '<a href="#/channel/' + encodeURIComponent(v.channelId) + '">' + avatarHTML(sub.title, sub.thumbnail, 40) + "</a>" +
+        '<div class="grow" style="margin-right:8px">' +
+          '<a class="ch-name truncate" style="display:block" href="#/channel/' + encodeURIComponent(v.channelId) + '">' + esc(sub.title) + "</a>" +
+          '<div class="small muted">' + (ch && ch.subscriberCount !== undefined ? esc(fmtSubs(ch.subscriberCount)) : "&nbsp;") + "</div>" +
+        "</div>" +
+        subscribeHTML(sub, true) +
+      "</div>" +
+      '<div class="actions">' +
+        '<div class="pill-group">' +
+          '<button data-act="like" data-id="' + esc(v.id) + '" class="' + (liked ? "on" : "") + '">' +
+            icon("thumbsUp", 20) + "<span>" + (v.likeCount !== undefined ? fmtCount(likeCount) : "") + "</span></button>" +
+          '<div class="sep"></div>' +
+          '<button data-act="dislike" data-id="' + esc(v.id) + '">' + icon("thumbsDown", 20) + "</button>" +
+        "</div>" +
+        '<button class="btn btn-secondary" data-act="share" data-id="' + esc(v.id) + '">' + icon("share", 18) + "共有</button>" +
+        '<button class="btn btn-secondary" data-act="later" data-id="' + esc(v.id) + '">' + icon(inWL ? "check" : "clock", 18) +
+          (inWL ? "保存済み" : "保存") + "</button>" +
+        '<a class="btn btn-secondary" href="https://www.youtube.com/watch?v=' + encodeURIComponent(v.id) + '" target="_blank" rel="noreferrer">' +
+          icon("ext", 18) + "YouTube</a>" +
+      "</div>" +
+    "</div>" +
+    descHTML(v) +
+    '<div id="comments-box"></div>'
+  );
+}
+
+function commentHTML(c) {
+  const name = c.authorName.indexOf("@") === 0 ? c.authorName : "@" + c.authorName;
+  const long = c.text.length > 200 || c.text.split("\n").length > 4;
+  return (
+    '<div class="cmt">' + avatarHTML(c.authorName.replace(/^@/, ""), c.authorAvatar, 40) +
+      '<div class="grow">' +
+        '<div class="row" style="gap:8px"><span class="nick">' + esc(name) + '</span><span class="small muted">' + esc(whenText(c)) + "</span></div>" +
+        '<p class="text' + (long ? " line4" : "") + '">' + linkify(c.text) + "</p>" +
+        (long ? '<button class="reply" data-act="cmt-expand">続きを読む</button>' : "") +
+        '<div class="btns">' +
+          '<button aria-label="高評価">' + icon("thumbsUp", 16) + "</button>" +
+          (c.likeCount > 0 ? "<span>" + fmtCount(c.likeCount) + "</span>" : "") +
+          '<button aria-label="低評価">' + icon("thumbsDown", 16) + "</button>" +
+          '<button style="padding:8px 12px;border-radius:18px">返信</button>' +
+        "</div>" +
+        (c.replyCount > 0 ? '<button class="reply">' + c.replyCount + "件の返信</button>" : "") +
+      "</div>" +
+    "</div>"
+  );
+}
+function renderComments(box, pager) {
+  if (pager.error) {
+    const disabled = pager.error.reason === "commentsDisabled";
+    box.innerHTML = disabled
+      ? '<h2 class="cmt-count">コメント</h2><div class="notice" style="display:flex;gap:12px;align-items:center">' +
+        icon("msgOff", 20) + "この動画ではコメントがオフになっています。</div>"
+      : '<h2 class="cmt-count">コメント</h2>' + errorHTML(pager.error, true, "comments");
+    return;
+  }
+  let html = '<h2 class="cmt-count">' +
+    (pager.total !== undefined ? pager.total.toLocaleString("ja-JP") + "件のコメント" : "コメント") + "</h2>";
+  html += '<div class="cmt-list">';
+  pager.items.forEach(function (c) { html += commentHTML(c); });
+  if (pager.loading) {
+    for (let i = 0; i < 5; i++) {
+      html += '<div class="cmt"><div class="sk" style="width:40px;height:40px;border-radius:50%;flex:none"></div>' +
+        '<div class="grow" style="padding-top:2px"><div class="sk" style="height:11px;width:30%;margin-bottom:10px"></div>' +
+        '<div class="sk" style="height:11px;width:92%;margin-bottom:8px"></div><div class="sk" style="height:11px;width:58%"></div></div></div>';
+    }
+  }
+  html += "</div>";
+  if (!pager.loading && !pager.items.length) html += '<p class="muted small">まだコメントはありません。</p>';
+  if (pager.loadingMore) html += spinnerHTML();
+  if (pager.hasMore && !pager.loadingMore) html += '<button class="btn btn-secondary" data-act="cmt-more" style="margin-top:24px">もっと見る</button>';
+  box.innerHTML = html;
+}
+
+function pageWatch() {
+  const id = currentRoute.query.v || "";
+  const main = $("#main");
+  if (!id) {
+    main.innerHTML = emptyHTML("alert", "動画IDが指定されていません");
+    return;
+  }
+  main.innerHTML =
+    '<div class="watch">' +
+      '<div class="watch-main">' +
+        '<div class="player"><iframe src="https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) +
+          '?autoplay=1&rel=0&modestbranding=1&hl=ja" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>' +
+        '<div id="watch-info">' +
+          '<div style="margin-top:12px"><div class="sk" style="height:22px;width:80%;margin-bottom:16px"></div>' +
+          '<div class="ch-row" style="margin-bottom:16px"><div class="sk" style="width:40px;height:40px;border-radius:50%"></div>' +
+          '<div class="grow"><div class="sk" style="height:13px;width:120px;margin-bottom:8px"></div><div class="sk" style="height:11px;width:80px"></div></div></div>' +
+          '<div class="sk" style="height:96px;width:100%;border-radius:12px"></div></div>' +
+        "</div>" +
+      "</div>" +
+      '<aside class="watch-aside" id="related-box"></aside>' +
+    "</div>";
+
+  const relBox = $("#related-box");
+  relBox.innerHTML = '<div style="display:flex;flex-direction:column;gap:12px">' + skeletonHTML("compact", 10) + "</div>";
+
+  api.watch(id).then(function (res) {
+    const info = $("#watch-info");
+    const v = res ? res.video : null;
+    if (!v) {
+      info.innerHTML =
+        '<div class="notice"><strong>この動画の情報を取得できませんでした</strong>' +
+        "動画が削除・非公開になっているか、API側で一時的にアクセスが制限されている可能性があります。プレイヤー自体は引き続き再生できます。" +
+        '<div class="btn-row" style="margin-top:12px"><button class="btn btn-secondary" data-act="settings">設定でデータソースを変更</button></div>' +
+        "</div>";
+      document.title = "MyTube";
+      return;
+    }
+    pageData.currentVideo = v;
+    pageData.currentChannel = res.channel || null;
+    state.hist = [v].concat(state.hist.filter(function (x) { return x.id !== v.id; })).slice(0, 200);
+    saveLib("hist");
+    renderSidebar();
+    document.title = v.title + " - MyTube";
+    info.innerHTML = watchInfoHTML(v, res.channel || null);
+
+    const pager = new Pager(function (pt) { return api.comments(v.id, pt); });
+    pageData.comments = pager;
+    const box = $("#comments-box");
+    renderComments(box, pager);
+    pager.load().then(function () {
+      const b2 = $("#comments-box");
+      if (b2) renderComments(b2, pager);
+    });
+
+    const rb = $("#related-box");
+    pageData.related = res.related || [];
+    rb.innerHTML = (res.related || []).length
+      ? '<div style="display:flex;flex-direction:column;gap:12px">' + res.related.map(compactCardHTML).join("") + "</div>"
+      : "";
+  }).catch(function (e) {
+    const info = $("#watch-info");
+    if (info) info.innerHTML = errorHTML(e, false, "watch");
+  });
+}
+
+function pageChannel() {
+  const id = currentRoute.params.id || "";
+  const main = $("#main");
+  main.innerHTML = '<div class="page" id="ch-page">' +
+    '<div class="sk" style="aspect-ratio:6.2/1;border-radius:16px"></div>' +
+    '<div class="ch-head"><div class="sk" style="width:120px;height:120px;border-radius:50%;flex:none"></div>' +
+    '<div class="grow" style="flex:1"><div class="sk" style="height:28px;width:280px;margin-bottom:12px"></div>' +
+    '<div class="sk" style="height:13px;width:340px"></div></div></div></div>';
+
+  api.channelPage(id).then(function (res) {
+    const page = $("#ch-page");
+    if (!page) return;
+    const ch = res ? res.channel : null;
+    if (!ch) {
+      page.innerHTML = emptyHTML("userX", "チャンネルが見つかりませんでした",
+        "チャンネルIDが正しくないか、API側で一時的に取得できない状態です。");
+      return;
+    }
+    document.title = ch.title + " - MyTube";
+    page.innerHTML =
+      (ch.banner
+        ? '<img class="banner" src="' + esc(ch.banner) + '" alt="" referrerpolicy="no-referrer" />'
+        : '<div class="banner" style="background:linear-gradient(100deg,#7f1d1d,#b45309,#1e293b)"></div>') +
+      '<div class="ch-head">' + avatarHTML(ch.title, ch.thumbnail, window.innerWidth >= 640 ? 160 : 80) +
+        '<div class="grow">' +
+          "<h1 style=\"margin:0;font-size:34px;font-weight:700\">" + esc(ch.title) + "</h1>" +
+          '<div class="ch-stats">' +
+            (ch.customUrl ? '<span class="ch-handle">' + esc(ch.customUrl) + "</span>" : "") +
+            (ch.subscriberCount !== undefined ? "<span>チャンネル登録者数 " + fmtCount(ch.subscriberCount) + "人</span>" : "") +
+            (ch.videoCount !== undefined ? "<span>" + ch.videoCount.toLocaleString("ja-JP") + " 本の動画</span>" : "") +
+          "</div>" +
+          (ch.description ? '<button class="ch-desc line2" data-act="ch-desc">' + esc(ch.description) + " <span class='muted'>...もっと見る</span></button>" : "") +
+          '<div class="btn-row" style="margin-top:12px">' + subscribeHTML(ch, true) +
+            '<a class="btn btn-secondary btn-lg" href="https://www.youtube.com/channel/' + encodeURIComponent(ch.id) + '" target="_blank" rel="noreferrer">' +
+              icon("ext", 16) + "YouTubeで開く</a></div>" +
+        "</div></div>" +
+      '<div class="ch-tabs"><div>動画</div></div>' +
+      '<div id="feed" style="padding-top:24px"></div><div id="sentinel" style="height:1px"></div>';
+
+    const container = $("#feed");
+    const pager = new Pager(function (pt) { return api.channelPage(id, pt); });
+    pageData.feed = pager;
+    pager.add((res && res.items) || []);
+    pager.token = res && res.nextPageToken;
+    pager.hasMore = !!pager.token;
+    const render = function () {
+      if (pager.error && !pager.items.length) { container.innerHTML = errorHTML(pager.error, false, "feed"); return; }
+      if (!pager.loading && !pager.hasMore && !pager.items.length) { container.innerHTML = emptyHTML("play", "このチャンネルには動画がありません"); return; }
+      if (!pager.items.length && (pager.loading || pager.hasMore)) { container.innerHTML = skeletonHTML("grid", 8); return; }
+      let html = '<div class="grid">';
+      pager.items.forEach(function (v) { html += gridCardHTML(v); });
+      if (pager.loading) html += skeletonHTML("grid", 8);
+      html += "</div>";
+      if (pager.error) html += errorHTML(pager.error, true, "feed-more");
+      if (pager.loadingMore) html += spinnerHTML();
+      container.innerHTML = html;
+    };
+    render();
+    pager.load().then(function () {
+      render();
+      attachInfinite($("#sentinel"), pager, render);
+    });
+  });
+}
+
+function pageFeed(kind) {
+  const main = $("#main");
+  const conf = {
+    history: ["history", "再生履歴", "再生履歴はありません", "動画を再生すると、ここに表示されます。"],
+    later: ["clock", "後で見る", "保存した動画はありません", "動画カードの時計アイコンや「保存」ボタンから追加できます。"],
+    liked: ["thumbsUp", "高く評価した動画", "高く評価した動画はありません", "動画ページの高評価ボタンから追加できます。"],
+    subs: ["tv", "登録チャンネル", "登録チャンネルはありません", "チャンネルページの「チャンネル登録」ボタンから登録できます。"],
+  }[kind];
+  document.title = conf[1] + " - MyTube";
+  main.innerHTML = '<div class="page"><div class="page-head"><div class="badge-ic">' + icon(conf[0], 24) +
+    "</div><h1>" + conf[1] + '</h1></div><div id="feed"></div></div>';
+  const container = $("#feed");
+
+  if (kind === "history") {
+    const render = function (filter) {
+      const q = (filter || "").trim().toLowerCase();
+      const list = q
+        ? state.hist.filter(function (v) {
+            return v.title.toLowerCase().indexOf(q) >= 0 || v.channelTitle.toLowerCase().indexOf(q) >= 0;
+          })
+        : state.hist;
+      if (!state.hist.length) {
+        container.innerHTML = emptyHTML("history", conf[2], conf[3]);
+        return;
+      }
+      container.innerHTML =
+        '<div class="watch-row" style="margin-bottom:20px"><div class="grow">' +
+          '<input class="input plain" id="hist-q" placeholder="再生履歴を検索" value="' + esc(filter || "") + '" style="max-width:420px" />' +
+        "</div>" +
+        '<button class="btn btn-ghost" data-act="clear-history">' + icon("trash", 18) + "再生履歴をすべて削除</button></div>" +
+        (list.length
+          ? '<div class="feed-list" style="display:flex;flex-direction:column;gap:20px">' +
+            list.map(function (v) {
+              return '<div style="position:relative">' + listCardHTML(v) +
+                '<button class="icon-btn" data-act="del-history" data-id="' + esc(v.id) +
+                '" aria-label="履歴から削除" style="position:absolute;right:0;top:0;background:rgba(0,0,0,.55)">' + icon("x", 18) + "</button></div>";
+            }).join("") + "</div>"
+          : '<p class="muted small" style="padding:40px 0;text-align:center">一致する動画はありません。</p>') +
+        '<p class="muted small" style="margin-top:24px">履歴はこのブラウザの localStorage にのみ保存されます（最大200件）。</p>';
+      const input = $("#hist-q");
+      if (input) {
+        input.addEventListener("input", function () {
+          const pos = input.selectionStart;
+          render(input.value);
+          const again = $("#hist-q");
+          if (again) { again.focus(); again.setSelectionRange(pos, pos); }
+        });
+      }
+    };
+    render("");
+    return;
+  }
+
+  if (kind === "subs") {
+    if (!state.subs.length) {
+      container.innerHTML = emptyHTML("tv", conf[2], conf[3], '<a class="btn btn-primary" href="#/">動画を探す</a>');
+      return;
+    }
+    container.innerHTML =
+      '<div class="row" style="gap:20px;overflow-x:auto;padding-bottom:16px;margin-bottom:24px;scrollbar-width:none">' +
+        state.subs.map(function (c) {
+          return '<div style="width:96px;flex:none;text-align:center">' +
+            '<a href="#/channel/' + encodeURIComponent(c.id) + '" style="display:flex;justify-content:center">' +
+              avatarHTML(c.title, c.thumbnail, 64) + "</a>" +
+            '<a href="#/channel/' + encodeURIComponent(c.id) + '" class="small line2" style="display:block;margin:8px 0">' + esc(c.title) + "</a>" +
+            subscribeHTML(c) + "</div>";
+        }).join("") +
+      "</div>" +
+      '<h2 style="margin:0 0 16px;font-size:18px;font-weight:500">最新の動画</h2><div id="subs-feed">' + spinnerHTML() + "</div>";
+    const targets = state.subs.slice(0, 10);
+    Promise.allSettled(targets.map(function (c) { return api.channelPage(c.id); })).then(function (results) {
+      let vids = [];
+      results.forEach(function (r, i) {
+        if (r.status === "fulfilled" && r.value && r.value.items) {
+          r.value.items.slice(0, 8).forEach(function (v) {
+            vids.push(Object.assign({}, v, { channelThumbnail: v.channelThumbnail || targets[i].thumbnail }));
+          });
+        }
+      });
+      vids.sort(function (a, b) { return b.publishedAt.localeCompare(a.publishedAt); });
+      const box = $("#subs-feed");
+      if (!box) return;
+      box.innerHTML = vids.length
+        ? '<div class="grid">' + vids.map(gridCardHTML).join("") + "</div>"
+        : '<p class="muted small" style="padding:32px 0;text-align:center">表示できる動画がありません。</p>';
+    });
+    return;
+  }
+
+  const list = kind === "later" ? state.later : state.liked;
+  container.innerHTML = list.length
+    ? '<div class="grid">' + list.map(gridCardHTML).join("") + "</div>"
+    : emptyHTML(conf[0], conf[2], conf[3]);
+}
+
+/* =========================================================================
+   ROUTER
+   ========================================================================= */
+let currentRoute = { name: "home", path: "/", query: {}, params: {} };
+function parseRoute() {
+  const raw = (location.hash || "#/").replace(/^#/, "") || "/";
+  const split = raw.split("?");
+  const path = split[0] || "/";
+  const query = {};
+  (split[1] || "").split("&").forEach(function (kv) {
+    if (!kv) return;
+    const i = kv.indexOf("=");
+    const k = decodeURIComponent(i < 0 ? kv : kv.slice(0, i));
+    const v = decodeURIComponent((i < 0 ? "" : kv.slice(i + 1)).replace(/\+/g, " "));
+    if (k) query[k] = v;
+  });
+  const seg = path.split("/").filter(Boolean);
+  const route = { name: "home", path: path, query: query, params: {} };
+  if (seg[0] === "results") route.name = "results";
+  else if (seg[0] === "watch") route.name = "watch";
+  else if (seg[0] === "channel") { route.name = "channel"; route.params.id = seg[1] || ""; }
+  else if (seg[0] === "trending") route.name = "trending";
+  else if (seg[0] === "feed") {
+    route.name = "feed";
+    route.params.kind = seg[1] === "watch-later" ? "later" : seg[1] === "subscriptions" ? "subs" : seg[1] === "liked" ? "liked" : "history";
+  }
+  return route;
+}
+function go(hash) {
+  if (location.hash === hash) renderRoute();
+  else location.hash = hash;
+}
+function setQuery(patch, replace) {
+  const q = Object.assign({}, currentRoute.query, patch);
+  Object.keys(q).forEach(function (k) { if (q[k] === "" || q[k] === undefined || q[k] === null) delete q[k]; });
+  const qs = Object.keys(q).map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(q[k]); }).join("&");
+  const url = "#" + currentRoute.path + (qs ? "?" + qs : "");
+  if (replace && history.replaceState) {
+    history.replaceState(null, "", url);
+    currentRoute = parseRoute();
+    renderRoute();
+  } else go(url);
+}
+
+function renderRoute(keepScroll) {
+  currentRoute = parseRoute();
+  closeMenu();
+  updateLayoutMode();
+  renderSidebar();
+  const y = keepScroll ? window.scrollY : 0;
+  switch (currentRoute.name) {
+    case "results": pageResults(); break;
+    case "watch": pageWatch(); break;
+    case "channel": pageChannel(); break;
+    case "trending": pageTrending(); break;
+    case "feed": pageFeed(currentRoute.params.kind); break;
+    default: pageHome();
+  }
+  if (keepScroll) window.scrollTo(0, y);
+  else window.scrollTo(0, 0);
+}
+
+/* =========================================================================
+   SIDEBAR
+   ========================================================================= */
+let sidebarExpanded = true;
+function updateLayoutMode() {
+  const isWatch = currentRoute.name === "watch";
+  const w = window.innerWidth;
+  document.body.classList.toggle("route-watch", isWatch);
+  document.body.classList.remove("sb-expanded", "sb-mini");
+  if (isWatch) return;
+  if (w >= 1280) document.body.classList.add(sidebarExpanded ? "sb-expanded" : "sb-mini");
+  else if (w >= 768) document.body.classList.add("sb-mini");
+}
+
+function navItems() {
+  return [
+    { href: "#/", label: "ホーム", icon: "home", match: function (r) { return r.name === "home"; } },
+    { href: "#/trending", label: "急上昇", icon: "flame", match: function (r) { return r.name === "trending"; } },
+    { href: "#/feed/subscriptions", label: "登録チャンネル", icon: "tv", match: function (r) { return r.name === "feed" && r.params.kind === "subs"; } },
+    { href: "#/feed/history", label: "履歴", icon: "history", match: function (r) { return r.name === "feed" && r.params.kind === "history"; } },
+    { href: "#/feed/watch-later", label: "後で見る", icon: "clock", match: function (r) { return r.name === "feed" && r.params.kind === "later"; } },
+    { href: "#/feed/liked", label: "高く評価した動画", icon: "thumbsUp", match: function (r) { return r.name === "feed" && r.params.kind === "liked"; } },
+    { href: "#/feed/history", label: "マイページ", icon: "listVideo", match: function (r) { return r.name === "feed"; } },
+  ];
+}
+function navItemHTML(item, mini) {
+  const active = item.match(currentRoute);
+  if (mini) {
+    return '<a class="mini-item' + (active ? " active" : "") + '" href="' + item.href + '" title="' + esc(item.label) + '">' +
+      icon(item.icon, 24) + "<span>" + esc(item.label) + "</span></a>";
+  }
+  return '<a class="nav-item' + (active ? " active" : "") + '" href="' + item.href + '">' +
+    icon(item.icon, 24) + "<span>" + esc(item.label) + "</span></a>";
+}
+function sidebarExpandedHTML() {
+  const items = navItems();
+  const subs = state.subs.length
+    ? state.subs.map(function (c) {
+        return '<a class="nav-item" href="#/channel/' + encodeURIComponent(c.id) + '">' +
+          avatarHTML(c.title, c.thumbnail, 24) + '<span class="truncate">' + esc(c.title) + "</span></a>";
+      }).join("")
+    : '<p class="nav-note">チャンネルページの「登録」ボタンから登録すると、ここに表示されます。</p>';
+  return (
+    items.slice(0, 3).map(function (i) { return navItemHTML(i, false); }).join("") +
+    '<div class="nav-sep"></div>' +
+    '<div class="nav-label">マイページ</div>' +
+    items.slice(3, 6).map(function (i) { return navItemHTML(i, false); }).join("") +
+    '<div class="nav-sep"></div>' +
+    '<div class="nav-label">登録チャンネル</div>' + subs +
+    '<div class="nav-sep"></div>' +
+    '<a class="nav-item" href="#/" data-act="settings">' + icon("settings", 24) + "<span>設定</span></a>" +
+    '<div class="status-card ' + (mode() === "demo" || liveDown ? "demo" : "ok") + '" data-act="settings" role="button" tabindex="0">' +
+      icon(mode() === "demo" ? "key" : "check", 20) +
+      "<span>" + (mode() === "demo"
+        ? "<strong>デモデータ</strong><br>設定からライブAPIに切り替えられます"
+        : liveDown
+          ? "<strong>ライブAPI停止中</strong><br>デモデータで表示しています"
+          : mode() === "official"
+            ? "<strong>公式API接続中</strong><br>YouTube Data API v3"
+            : "<strong>ライブAPI接続中</strong><br>" + esc(liveHost().replace(/^https?:\/\//, ""))) + "</span></div>" +
+    '<p class="sb-foot">MyTube は YouTube Data API v3 を使ったフロントエンドのみで動作する YouTube クライアントです。</p>'
+  );
+}
+function renderSidebar() {
+  const items = navItems();
+  const isMini = document.body.classList.contains("sb-mini");
+  const sb = $("#sidebar");
+  sb.className = isMini ? "mini" : "";
+  sb.innerHTML = isMini
+    ? [items[0], items[1], items[2], items[6]].map(function (i) { return navItemHTML(i, true); }).join("")
+    : sidebarExpandedHTML();
+  $("#drawer").innerHTML =
+    '<div class="drawer-head">' +
+      '<button class="icon-btn" data-act="close-drawer" aria-label="メニューを閉じる">' + icon("menu") + "</button>" +
+      '<a class="logo" href="#/"><svg width="28" height="20" viewBox="0 0 28 20"><rect width="28" height="20" rx="5" fill="#ff0033"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg><span>MyTube</span><sup>JP</sup></a>' +
+    "</div>" +
+    '<div style="padding:8px 12px">' + sidebarExpandedHTML() + "</div>";
+  updateStatusBtn();
+}
+function updateStatusBtn() {
+  const b = $("#status-btn");
+  if (!b) return;
+  const m = mode();
+  if (m === "official") {
+    b.className = "status-btn live";
+    b.innerHTML = '<span class="dot"></span>公式API';
+    b.title = "YouTube Data API v3 で取得しています";
+  } else if (m === "live" && !liveDown) {
+    b.className = "status-btn ok";
+    b.innerHTML = icon("sparkles", 16) + "ライブ";
+    b.title = "キー不要の公開APIからリアルタイムで取得しています";
+  } else {
+    b.className = "status-btn demo";
+    b.innerHTML = icon("key", 16) + "デモ";
+    b.title = "公開APIに接続できないためサンプルデータを表示しています";
+  }
+}
+function sourceBadgeHTML() {
+  const m = mode();
+  const host = liveHost() ? liveHost().replace(/^https?:\/\//, "") : "";
+  if (m === "official") return { cls: "ok", text: "公式 API (YouTube Data API v3)", sub: "APIキーで認証中" };
+  if (m === "live") return {
+    cls: liveDown ? "demo" : "ok",
+    text: liveDown ? "ライブAPIに接続できません" : "ライブ API（キー不要）",
+    sub: liveDown ? "デモデータで表示中 — 「再試行」を押すと再接続します" : "接続先: " + host,
+  };
+  return { cls: "demo", text: "デモデータ", sub: "サンプル動画で動作中（再生は可能）" };
+}
+
+/* =========================================================================
+   SEARCH
+   ========================================================================= */
+function fetchSuggestions(q) {
+  return new Promise(function (resolve) {
+    const query = (q || "").trim();
+    if (!query) return resolve([]);
+    const cb = "__mtsug" + Math.floor(Math.random() * 1e9);
+    const script = document.createElement("script");
+    let done = false;
+    const timer = setTimeout(function () { if (!done) { done = true; cleanup(); resolve([]); } }, 3000);
+    function cleanup() {
+      clearTimeout(timer);
+      try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+    window[cb] = function (data) {
+      if (done) return;
+      done = true;
+      cleanup();
+      try {
+        const raw = data && data[1];
+        const list = Array.isArray(raw)
+          ? raw.map(function (x) { return Array.isArray(x) ? String(x[0] || "") : String(x || ""); }).filter(Boolean).slice(0, 10)
+          : [];
+        resolve(list);
+      } catch (e) { resolve([]); }
+    };
+    script.onerror = function () { if (!done) { done = true; cleanup(); resolve([]); } };
+    script.charset = "utf-8";
+    script.src = "https://suggestqueries.google.com/complete/search?client=youtube&ds=yt&hl=ja&ie=utf-8&oe=utf-8&q=" +
+      encodeURIComponent(query) + "&callback=" + cb;
+    document.head.appendChild(script);
+  });
+}
+
+function wireSearch(input, form, box, clearBtn) {
+  let items = [];
+  let active = -1;
+  let timer = null;
+  let sugg = [];
+
+  function render() {
+    const value = input.value.trim();
+    const recent = value
+      ? state.recent.filter(function (r) { return r.toLowerCase().indexOf(value.toLowerCase()) >= 0 && r !== value; }).slice(0, 3)
+      : state.recent.slice(0, 8);
+    items = recent.map(function (r) { return { text: r, recent: true }; })
+      .concat(sugg.filter(function (s) { return recent.indexOf(s) < 0; }).map(function (s) { return { text: s, recent: false }; }))
+      .slice(0, 10);
+    if (!items.length) { box.classList.remove("open"); box.innerHTML = ""; return; }
+    box.innerHTML = items.map(function (it, i) {
+      return '<div class="suggest-item' + (i === active ? " active" : "") + '" data-sug="' + i + '">' +
+        icon(it.recent ? "history" : "search", 20) + '<span class="grow truncate">' + esc(it.text) + "</span>" +
+        (it.recent ? '<button class="rm" data-rm="' + esc(it.text) + '">削除</button>' : "") + "</div>";
+    }).join("");
+    box.classList.add("open");
+  }
+  function submit(text) {
+    const q = (text || "").trim();
+    if (!q) return;
+    state.recent = [q].concat(state.recent.filter(function (x) { return x !== q; })).slice(0, 10);
+    saveLib("recent");
+    box.classList.remove("open");
+    active = -1;
+    input.blur();
+    document.body.classList.remove("searching");
+    go("#/results?search_query=" + encodeURIComponent(q));
+  }
+
+  input.addEventListener("input", function () {
+    active = -1;
+    form.classList.toggle("has-value", !!input.value);
+    clearTimeout(timer);
+    if (!input.value.trim()) { sugg = []; render(); return; }
+    timer = setTimeout(function () {
+      fetchSuggestions(input.value).then(function (list) { sugg = list; render(); });
+    }, 180);
+    render();
+  });
+  input.addEventListener("focus", render);
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(active + 1, items.length - 1); render(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(active - 1, -1); render(); }
+    else if (e.key === "Escape") { box.classList.remove("open"); active = -1; }
+    else if (e.key === "Enter" && active >= 0 && items[active]) { e.preventDefault(); submit(items[active].text); }
+  });
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    submit(input.value);
+  });
+  box.addEventListener("mousedown", function (e) {
+    const rm = e.target.closest("[data-rm]");
+    if (rm) {
+      e.preventDefault();
+      state.recent = state.recent.filter(function (x) { return x !== rm.getAttribute("data-rm"); });
+      saveLib("recent");
+      render();
+      return;
+    }
+    const it = e.target.closest("[data-sug]");
+    if (it) {
+      e.preventDefault();
+      const idx = Number(it.getAttribute("data-sug"));
+      if (items[idx]) submit(items[idx].text);
+    }
+  });
+  document.addEventListener("mousedown", function (e) {
+    if (!box.contains(e.target) && e.target !== input) box.classList.remove("open");
+  });
+  if (clearBtn) {
+    clearBtn.addEventListener("click", function () {
+      input.value = "";
+      form.classList.remove("has-value");
+      sugg = [];
+      render();
+      input.focus();
+    });
+  }
+}
+
+function startVoice(input, btn) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast("このブラウザは音声検索に対応していません"); return; }
+  try {
+    const rec = new SR();
+    rec.lang = "ja-JP";
+    rec.interimResults = false;
+    rec.onresult = function (e) {
+      const t = e.results && e.results[0] && e.results[0][0] ? e.results[0][0].transcript : "";
+      if (t) {
+        input.value = t;
+        document.body.classList.remove("searching");
+        go("#/results?search_query=" + encodeURIComponent(t));
+      }
+    };
+    rec.onend = function () { btn.classList.remove("listening"); };
+    rec.onerror = function () { btn.classList.remove("listening"); toast("音声を認識できませんでした"); };
+    btn.classList.add("listening");
+    rec.start();
+  } catch (e) { btn.classList.remove("listening"); }
+}
+
+/* =========================================================================
+   SETTINGS MODAL
+   ========================================================================= */
+const REGIONS = [["JP", "日本"], ["US", "アメリカ"], ["KR", "韓国"], ["TW", "台湾"], ["GB", "イギリス"], ["DE", "ドイツ"], ["FR", "フランス"], ["IN", "インド"], ["BR", "ブラジル"]];
+function openSettings() {
+  $("#modal-root").innerHTML =
+    '<div class="modal-bg" id="modal-bg"><div class="modal" role="dialog" aria-modal="true">' +
+      '<div class="modal-head"><h2>設定</h2><button class="icon-btn" data-act="close-modal" aria-label="閉じる">' + icon("x", 20) + "</button></div>" +
+      '<div class="modal-body">' +
+        "<section>" +
+          "<h3>" + icon("sliders", 18) + "データソース</h3>" +
+          '<div class="btn-row" style="margin-bottom:12px">' +
+            '<button class="chip' + (mode() === "live" ? " active" : "") + '" data-act="source" data-id="live">ライブAPI（キー不要）</button>' +
+            '<button class="chip' + (mode() === "official" ? " active" : "") + '" data-act="source" data-id="official">公式API（キー使用）</button>' +
+            '<button class="chip' + (mode() === "demo" ? " active" : "") + '" data-act="source" data-id="demo">デモデータ</button>' +
+          "</div>" +
+          (function () {
+            const s = sourceBadgeHTML();
+            return '<div class="src-badge ' + s.cls + '">' + icon(s.cls === "ok" ? "check" : "alert", 18) +
+              "<div><strong>" + esc(s.text) + '</strong><span class="sub">' + esc(s.sub) + "</span></div></div>";
+          })() +
+          '<div class="btn-row" style="margin-top:12px">' +
+            '<button class="btn btn-secondary" data-act="reconnect">' + icon("refresh", 16) + "ライブAPIに再接続</button>" +
+          "</div>" +
+          '<p class="small" style="margin:12px 0 0">ライブAPIは APIキー不要で誰でも使える公開エンドポイント（Piped）を複数試行し、応答した順に自動フェイルオーバーします。動画の再生は YouTube 公式プレイヤーを使います。</p>' +
+        "</section>" +
+        "<section>" +
+          "<h3>" + icon("key", 18) + "公式 YouTube Data API v3 キー（任意）</h3>" +
+          "<p>公式APIに切り替えると、検索・急上昇・コメント・チャンネル情報を Google のエンドポイントから取得します。キーはこのブラウザの localStorage にのみ保存され、Google 以外には送信されません。</p>" +
+          '<div class="field">' +
+            '<input class="input" type="password" id="key-input" placeholder="AIzaSy..." spellcheck="false" autocomplete="off" value="' + esc(state.apiKey) + '" />' +
+            '<button class="eye" id="eye-btn" aria-label="キーを表示">' + icon("eye", 18) + "</button>" +
+            '<button class="btn btn-secondary" id="test-btn" style="height:44px">接続テスト</button>' +
+          "</div>" +
+          '<div id="test-result"></div>' +
+          '<div class="btn-row" style="margin-top:16px">' +
+            '<button class="btn btn-primary" id="save-key">保存</button>' +
+            (state.apiKey ? '<button class="btn btn-secondary" id="del-key">' + icon("trash", 16) + "キーを削除してデモモードに戻す</button>" : "") +
+          "</div>" +
+        "</section>" +
+        '<section class="box"><h3>APIキーの取得手順（無料・数分で完了）</h3>' +
+          "<ol>" +
+            '<li><a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">Google Cloud Console</a> でプロジェクトを作成（または選択）します。</li>' +
+            '<li>「APIとサービス」→「ライブラリ」で <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noreferrer">YouTube Data API v3</a> を検索して「有効にする」をクリックします。</li>' +
+            "<li>「認証情報」→「認証情報を作成」→「APIキー」を選択します。</li>" +
+            "<li>作成されたキーを上の入力欄に貼り付けて「保存」します。</li>" +
+          "</ol>" +
+          '<p class="small" style="margin:12px 0 0">※ 無料枠は1日 10,000 ユニットです。検索は1回 100 ユニット、急上昇・動画詳細・コメント取得は1ユニットです。取得結果はブラウザ内に15分キャッシュしてクォータを節約しています。</p>' +
+        "</section>" +
+        "<section><h3>ライブAPI インスタンス</h3>" +
+          "<p>接続先の候補です。独自の Piped API URL を追加できます（例: https://pipedapi.example.com）。</p>" +
+          '<div id="host-list">' + LIVE_HOSTS.map(function (h, i) {
+            return '<div class="row" style="gap:8px;padding:6px 0;font-size:13px">' +
+              '<span class="' + (i === liveIdx ? "text-strong" : "muted") + '">' + esc(h.replace(/^https?:\/\//, "")) + "</span>" +
+              (i === liveIdx ? '<span class="chip active" style="height:22px;font-size:11px;padding:0 8px">使用中</span>' : "") + "</div>";
+          }).join("") + "</div>" +
+          '<div class="field" style="margin-top:10px">' +
+            '<input class="input plain" id="host-input" placeholder="https://pipedapi.example.com" spellcheck="false" />' +
+            '<button class="btn btn-secondary" id="add-host" style="height:44px">追加</button>' +
+          "</div>" +
+        "</section>" +
+        "<section><h3>地域</h3><p>急上昇動画や検索結果の優先地域を設定します。</p>" +
+          '<div class="btn-row">' + REGIONS.map(function (r) {
+            return '<button class="chip' + (state.region === r[0] ? " active" : "") + '" data-act="region" data-id="' + r[0] + '">' + r[1] + "</button>";
+          }).join("") + "</div>" +
+        "</section>" +
+        "<section><h3>データ</h3>" +
+          '<div class="btn-row">' +
+            '<button class="btn btn-secondary" data-act="clear-history">' + icon("history", 16) + "再生履歴を削除</button>" +
+            '<button class="btn btn-secondary" data-act="clear-cache">' + icon("refresh", 16) + "APIキャッシュを削除</button>" +
+          "</div></section>" +
+      "</div></div></div>";
+
+  $("#modal-bg").addEventListener("mousedown", function (e) {
+    if (e.target === this) closeSettings();
+  });
+  const input = $("#key-input");
+  $("#eye-btn").addEventListener("click", function () {
+    const isPwd = input.type === "password";
+    input.type = isPwd ? "text" : "password";
+    this.innerHTML = icon(isPwd ? "eyeOff" : "eye", 18);
+    this.setAttribute("aria-label", isPwd ? "キーを隠す" : "キーを表示");
+  });
+  $("#test-btn").addEventListener("click", async function () {
+    const key = input.value.trim();
+    if (!key) return;
+    const box = $("#test-result");
+    box.innerHTML = '<div class="result">' + icon("loader", 18) + "テスト中...</div>";
+    const res = await api.testKey(key);
+    if (res.ok) box.innerHTML = '<div class="result ok">' + icon("check", 18) + "接続に成功しました。YouTube Data API v3 を利用できます。</div>";
+    else {
+      const d = describeError(res.error);
+      box.innerHTML = '<div class="result bad">' + icon("alert", 18) + esc(d.title + " " + (d.hint || d.detail || "")) + "</div>";
+    }
+  });
+  $("#save-key").addEventListener("click", function () {
+    const key = input.value.trim();
+    state.source = key ? "official" : "live";
+    store.setRaw(KEYS.source, state.source);
+    applyKey(key);
+  });
+  const del = $("#del-key");
+  if (del) del.addEventListener("click", function () {
+    state.source = "live";
+    store.setRaw(KEYS.source, "live");
+    applyKey("");
+  });
+  $("#add-host").addEventListener("click", function () {
+    const el = $("#host-input");
+    const v = (el.value || "").trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/[\w.-]+/.test(v)) { toast("有効なURLを入力してください"); return; }
+    if (LIVE_HOSTS.indexOf(v) >= 0) { toast("すでに登録されています"); return; }
+    store.set(KEYS.customHost, v);
+    LIVE_HOSTS.unshift(v);
+    liveIdx = 0;
+    store.setRaw(KEYS.liveIdx, "0");
+    clearCache();
+    toast("インスタンスを追加しました");
+    closeSettings();
+    openSettings();
+    renderRoute(true);
+  });
+}
+function applyKey(key) {
+  state.apiKey = key;
+  store.setRaw(KEYS.key, key);
+  clearCache();
+  toast(key ? "APIキーを保存しました" : "APIキーを削除しました（デモモード）");
+  closeSettings();
+  renderRoute(true);
+}
+function closeSettings() { $("#modal-root").innerHTML = ""; }
+
+/* =========================================================================
+   GLOBAL EVENTS
+   ========================================================================= */
+function toggleLater(id) {
+  const i = state.later.map(function (x) { return x.id; }).indexOf(id);
+  if (i >= 0) {
+    state.later.splice(i, 1);
+    saveLib("later");
+    toast("「後で見る」から削除しました");
+  } else {
+    state.later.unshift(findVideo(id));
+    saveLib("later");
+    toast("「後で見る」に保存しました");
+  }
+  afterLibChange();
+}
+function toggleLike(id) {
+  const i = state.liked.map(function (x) { return x.id; }).indexOf(id);
+  if (i >= 0) {
+    state.liked.splice(i, 1);
+    saveLib("liked");
+    toast("高評価を取り消しました");
+  } else {
+    state.liked.unshift(findVideo(id));
+    saveLib("liked");
+    toast("「高く評価した動画」に追加しました");
+  }
+  afterLibChange();
+}
+function toggleSub(chId) {
+  const i = state.subs.map(function (x) { return x.id; }).indexOf(chId);
+  if (i >= 0) {
+    state.subs.splice(i, 1);
+    saveLib("subs");
+    toast("チャンネル登録を解除しました");
+  } else {
+    const ch = CH_BY_ID[chId] || { id: chId, title: chId, thumbnail: "" };
+    state.subs.push({ id: ch.id, title: ch.title, thumbnail: ch.thumbnail || "" });
+    saveLib("subs");
+    toast("チャンネル登録しました");
+  }
+  afterLibChange();
+}
+function afterLibChange() {
+  renderSidebar();
+  if (currentRoute.name === "watch") {
+    const v = pageData.currentVideo;
+    const box = $("#watch-info");
+    if (v && box) box.innerHTML = watchInfoHTML(v, pageData.currentChannel || null);
+    const rel = $("#related-box");
+    if (rel && pageData.related) {
+      rel.innerHTML = '<div class="stack12">' + pageData.related.map(compactCardHTML).join("") + "</div>";
+    }
+    return;
+  }
+  renderRoute(true);
+}
+
+document.addEventListener("click", async function (e) {
+  const t = e.target.closest("[data-act]");
+  if (!t) return;
+  const act = t.getAttribute("data-act");
+  const id = t.getAttribute("data-id");
+
+  if (act === "settings") { e.preventDefault(); openSettings(); return; }
+  if (act === "close-modal") { closeSettings(); return; }
+  if (act === "close-drawer") { document.body.classList.remove("drawer-open"); return; }
+  if (act === "dismiss-live") {
+    const b = $("#live-banner") || $(".live-banner");
+    if (b) b.style.display = "none";
+    try { sessionStorage.setItem("mytube.liveHidden", "1"); } catch (err) {}
+    return;
+  }
+  if (act === "dismiss-demo") {
+    const b = $("#demo-banner");
+    if (b) b.style.display = "none";
+    try { sessionStorage.setItem("mytube.demoHidden", "1"); } catch (err) {}
+    return;
+  }
+  if (act === "menu") { e.preventDefault(); openMenu(t, findVideo(id)); return; }
+  if (act === "later") { e.preventDefault(); closeMenu(); toggleLater(id); return; }
+  if (act === "like") { e.preventDefault(); closeMenu(); toggleLike(id); return; }
+  if (act === "dislike") {
+    e.preventDefault();
+    t.classList.toggle("on");
+    toast(t.classList.contains("on") ? "低評価を付けました" : "低評価を取り消しました");
+    return;
+  }
+  if (act === "copy") {
+    e.preventDefault();
+    closeMenu();
+    try {
+      await navigator.clipboard.writeText("https://www.youtube.com/watch?v=" + id);
+      toast("リンクをコピーしました");
+    } catch (err) { toast("コピーに失敗しました"); }
+    return;
+  }
+  if (act === "openyt") {
+    e.preventDefault();
+    closeMenu();
+    window.open("https://www.youtube.com/watch?v=" + id, "_blank", "noopener");
+    return;
+  }
+  if (act === "share") {
+    e.preventDefault();
+    const url = "https://www.youtube.com/watch?v=" + id;
+    const v = findVideo(id);
+    if (navigator.share) {
+      try { await navigator.share({ title: v.title || "YouTube", url: url }); } catch (err) {}
+    } else {
+      try { await navigator.clipboard.writeText(url); toast("リンクをコピーしました"); } catch (err) {}
+    }
+    return;
+  }
+  if (act === "sub") {
+    e.preventDefault();
+    const chId = t.getAttribute("data-ch");
+    const v = findVideo(id);
+    if (!CH_BY_ID[chId] && v && v.channelId === chId) {
+      CH_BY_ID[chId] = { id: chId, title: v.channelTitle, thumbnail: v.channelThumbnail || "",
+        description: "", customUrl: "", publishedAt: "" };
+    }
+    toggleSub(chId);
+    return;
+  }
+  if (act === "chip") { e.preventDefault(); setQuery({ c: t.getAttribute("data-id") }, true); return; }
+  if (act === "chipscroll") {
+    e.preventDefault();
+    const sc = $("#chipbar-scroll");
+    if (sc) sc.scrollBy({ left: Number(t.getAttribute("data-dir")) * 320, behavior: "smooth" });
+    return;
+  }
+  if (act === "order") { e.preventDefault(); setQuery({ order: t.getAttribute("data-order") }, true); return; }
+  if (act === "trendtab") { e.preventDefault(); setQuery({ c: t.getAttribute("data-id") }, true); return; }
+  if (act === "retry") {
+    e.preventDefault();
+    const target = t.getAttribute("data-target");
+    if (target === "feed" || target === "feed-more") {
+      const p = pageData.feed;
+      if (p) (target === "feed" ? p.load() : p.loadMore()).then(function () { renderRoute(true); });
+    } else if (target === "comments") {
+      const p = pageData.comments;
+      if (p) p.load().then(function () { renderComments($("#comments-box"), p); });
+    } else renderRoute(true);
+    return;
+  }
+  if (act === "cmt-more") {
+    e.preventDefault();
+    const p = pageData.comments;
+    if (p) p.loadMore().then(function () { renderComments($("#comments-box"), p); });
+    return;
+  }
+  if (act === "cmt-expand") {
+    e.preventDefault();
+    const p = t.parentNode.querySelector(".text");
+    if (p) p.classList.remove("line4");
+    t.style.display = "none";
+    return;
+  }
+  if (act === "desc-open") {
+    if (e.target.closest && e.target.closest("a")) return;
+    const body = $("#desc-body"), more = $("#desc-more");
+    if (!body) return;
+    if (body.classList.contains("line3")) {
+      body.classList.remove("line3");
+      if (more) more.textContent = "一部を表示";
+      t.classList.add("open");
+    } else {
+      body.classList.add("line3");
+      if (more) more.textContent = "...もっと見る";
+      t.classList.remove("open");
+    }
+    return;
+  }
+  if (act === "ch-desc") { t.classList.toggle("line2"); return; }
+  if (act === "clear-history") {
+    e.preventDefault();
+    state.hist = [];
+    saveLib("hist");
+    toast("再生履歴をすべて削除しました");
+    closeSettings();
+    renderSidebar();
+    renderRoute(true);
+    return;
+  }
+  if (act === "del-history") {
+    e.preventDefault();
+    state.hist = state.hist.filter(function (x) { return x.id !== id; });
+    saveLib("hist");
+    renderSidebar();
+    renderRoute(true);
+    return;
+  }
+  if (act === "clear-cache") { e.preventDefault(); clearCache(); toast("APIキャッシュを削除しました"); return; }
+  if (act === "source") {
+    e.preventDefault();
+    const src = t.getAttribute("data-id");
+    state.source = src;
+    store.setRaw(KEYS.source, src);
+    if (src === "official" && !hasKey()) toast("APIキーが未設定のため、保存時にライブAPIへ戻ります");
+    clearCache();
+    closeSettings();
+    renderRoute(true);
+    return;
+  }
+  if (act === "reconnect") {
+    e.preventDefault();
+    liveDown = false;
+    clearCache();
+    updateStatusBtn();
+    toast("ライブAPIに再接続します");
+    closeSettings();
+    renderRoute(true);
+    return;
+  }
+  if (act === "region") {
+    e.preventDefault();
+    state.region = t.getAttribute("data-id");
+    store.setRaw(KEYS.region, state.region);
+    clearCache();
+    openSettings();
+    renderRoute(true);
+    return;
+  }
+});
+
+/* =========================================================================
+   INIT
+   ========================================================================= */
+$("#menu-btn").addEventListener("click", function () {
+  if (currentRoute.name !== "watch" && window.innerWidth >= 768) {
+    sidebarExpanded = !sidebarExpanded;
+    updateLayoutMode();
+    renderSidebar();
+  } else {
+    document.body.classList.toggle("drawer-open");
+  }
+});
+$("#drawer-overlay").addEventListener("click", function () { document.body.classList.remove("drawer-open"); });
+$("#settings-btn").addEventListener("click", openSettings);
+$("#account-btn").addEventListener("click", openSettings);
+$("#status-btn").addEventListener("click", openSettings);
+$("#search-open-btn").addEventListener("click", function () {
+  document.body.classList.add("searching");
+  setTimeout(function () { $("#ms-input").focus(); }, 30);
+});
+$("#ms-back").addEventListener("click", function () { document.body.classList.remove("searching"); });
+
+wireSearch($("#search-input"), $("#search-form"), $("#suggest"), $("#search-clear"));
+wireSearch($("#ms-input"), $("#ms-form"), $("#ms-suggest"), null);
+$("#mic-btn").addEventListener("click", function () { startVoice($("#search-input"), this); });
+$("#mic-btn-m").addEventListener("click", function () { startVoice($("#ms-input"), this); });
+
+document.addEventListener("keydown", function (e) {
+  const tag = e.target && e.target.tagName;
+  if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") {
+    e.preventDefault();
+    if (window.innerWidth >= 768) $("#search-input").focus();
+    else {
+      document.body.classList.add("searching");
+      $("#ms-input").focus();
+    }
+  }
+  if (e.key === "Escape") {
+    closeMenu();
+    closeSettings();
+    document.body.classList.remove("drawer-open");
+    document.body.classList.remove("searching");
+  }
+});
+
+window.addEventListener("hashchange", function () {
+  document.body.classList.remove("drawer-open");
+  document.body.classList.remove("searching");
+  renderRoute();
+});
+let resizeTimer = null;
+window.addEventListener("resize", function () {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function () {
+    updateLayoutMode();
+    renderSidebar();
+  }, 120);
+});
+
+updateLayoutMode();
+renderSidebar();
+renderRoute();
+</script>
+</body>
+</html>
